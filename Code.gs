@@ -882,6 +882,7 @@ function syncOrderToDataSheet(docNumber) {
   const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
   
   let totalAmount = 0;
+  let itemCount = 0; // Track items for THIS order only
   
   for (var currentRow = 9; currentRow <= lastItemRow; currentRow++) {
     const itemCode = orderSheet.getRange(currentRow, 1).getValue();
@@ -895,6 +896,7 @@ function syncOrderToDataSheet(docNumber) {
     const amount = orderSheet.getRange(currentRow, 8).getValue();
     
     totalAmount += Number(amount || 0);
+    itemCount++; // Count each item for THIS order
     
     const row = new Array(dataHeaders.length).fill('');
     row[idx['DocNumber']] = docNumber;
@@ -927,7 +929,7 @@ function syncOrderToDataSheet(docNumber) {
     dataSheet.getRange(2, 1, filteredData.length, dataHeaders.length).setValues(filteredData);
   }
   
-  updateMasterIndex(docNumber, status, filteredData.length, totalAmount, assignedTo);
+  updateMasterIndex(docNumber, status, itemCount, totalAmount, assignedTo);
 }
 
 /******** UPDATE MASTER INDEX ********/
