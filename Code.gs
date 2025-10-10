@@ -11,11 +11,7 @@ const SHEET = {
   ORDER_MASTER: 'ORDER_MASTER',
   PRICEBOOK: 'PriceBook',
   CUSTOMERS: 'Customers',
-  ARCHIVE: 'Archive',
-  CONFIG: 'Config',
   LOGS: 'Logs',
-  CEO_DASHBOARD: 'CEO_Dashboard',
-  FIELD_SHOPPING: 'Field_Shopping_List',
   ORDER_DATA: '_OrderData'
 };
 
@@ -79,13 +75,13 @@ function buildClientMenu() {
   
   ui.createMenu('⚓ Dupuys')
     .addItem('📋 Order Master', 'openOrderMaster')
-    .addItem('🎯 CEO Dashboard', 'openCEODashboard')
-    .addItem('🛒 Shopping List', 'openShoppingList')
     .addSeparator()
     .addSubMenu(ui.createMenu('💰 QuickBooks Export')
       .addItem('Export Current Order', 'exportCurrentOrderSheet')
-      .addItem('Export Ready Batch', 'exportReadyBatch')
-      .addItem('Archive Exported Orders', 'archiveExported'))
+      .addItem('Export Ready Batch', 'exportReadyBatch'))
+    .addSubMenu(ui.createMenu('📦 Archive Orders')
+      .addItem('Archive Current Order', 'archiveCurrentOrder')
+      .addItem('Archive All Exported Orders', 'archiveExported'))
     .addSeparator()
     .addSubMenu(ui.createMenu('👥 Manage Customers')
       .addItem('Add New Customer', 'addCustomerManually')
@@ -125,8 +121,6 @@ function buildAdminMenu() {
     .addSeparator()
     .addSubMenu(ui.createMenu('📊 Views')
       .addItem('📋 Order Master Index', 'openOrderMaster')
-      .addItem('🎯 CEO Dashboard', 'openCEODashboard')
-      .addItem('🛒 Shopping List', 'openShoppingList')
       .addSeparator()
       .addItem('👁️ Show All Order Sheets', 'showAllOrderSheets')
       .addItem('🙈 Hide All Order Sheets', 'hideAllOrderSheets')
@@ -137,8 +131,10 @@ function buildAdminMenu() {
     .addSeparator()
     .addSubMenu(ui.createMenu('💰 QuickBooks')
       .addItem('Export Current Order', 'exportCurrentOrderSheet')
-      .addItem('Export Ready Batch', 'exportReadyBatch')
-      .addItem('Archive Exported Orders', 'archiveExported'))
+      .addItem('Export Ready Batch', 'exportReadyBatch'))
+    .addSubMenu(ui.createMenu('📦 Archive')
+      .addItem('Archive Current Order', 'archiveCurrentOrder')
+      .addItem('Archive All Exported Orders', 'archiveExported'))
     .addSeparator()
     .addItem('🗑️ Clear Cache', 'clearCache')
     .addItem('🔧 Switch to Client Mode', 'switchToClientMode')
@@ -148,8 +144,7 @@ function buildAdminMenu() {
 /******** CLIENT HELP ********/
 function showClientHelp() {
   const ui = SpreadsheetApp.getUi();
-  const cfg = SpreadsheetApp.getActive().getSheetByName(SHEET.CONFIG);
-  const webAppUrl = findConfig(cfg, 'WebAppUrl') || 'Not configured yet';
+  const webAppUrl = 'Not configured - Ask administrator';
   
   const helpText = '📖 TUG OPS - QUICK START GUIDE\n\n' +
     '═══════════════════════════════════\n\n' +
@@ -159,19 +154,18 @@ function showClientHelp() {
     '   • Click "📄 Open Order" links to view details\n' +
     '   • Fill in Base Cost (yellow column) as you shop\n' +
     '   • Update Status as you progress\n\n' +
-    '2️⃣ Shopping\n' +
-    '   • Menu > 🛒 Shopping List\n' +
-    '   • See all items grouped by category\n' +
-    '   • Use filters to find specific items\n\n' +
-    '3️⃣ Dashboard\n' +
-    '   • Menu > 🎯 CEO Dashboard\n' +
-    '   • Real-time metrics and status\n\n' +
-    '4️⃣ Export to QuickBooks\n' +
+    '2️⃣ Upload Receipts\n' +
+    '   • In order sheet, scroll to Receipt Images section\n' +
+    '   • Right-click → Insert → Image → Image in cell\n' +
+    '   • Or paste Google Drive links to receipt photos\n\n' +
+    '3️⃣ Export to QuickBooks\n' +
     '   • Open an order → Set Export Status = "Ready"\n' +
     '   • Menu > 💰 QuickBooks Export > Export Ready Batch\n' +
     '   • Download CSV/IIF files\n\n' +
-    '5️⃣ Archive Old Orders\n' +
-    '   • Menu > 💰 QuickBooks Export > Archive Exported Orders\n\n' +
+    '4️⃣ Archive Orders\n' +
+    '   • Menu > 📦 Archive Orders > Archive Current Order\n' +
+    '   • Or Archive All Exported Orders\n' +
+    '   • Orders saved to "Archived Orders" Drive folder\n\n' +
     '═══════════════════════════════════\n\n' +
     '🌐 WEB APP URL:\n' +
     webAppUrl + '\n\n' +
@@ -181,7 +175,8 @@ function showClientHelp() {
     '• Orders sync automatically - no manual refresh needed\n' +
     '• Hidden order sheets unhide when you click links\n' +
     '• Use Status dropdown to track progress\n' +
-    '• Base Cost column is highlighted yellow\n\n' +
+    '• Base Cost column is highlighted yellow\n' +
+    '• Upload receipt images immediately after shopping\n\n' +
     '❓ Need Help? Contact your system administrator.';
   
   ui.alert('Help & Instructions', helpText, ui.ButtonSet.OK);
@@ -236,16 +231,7 @@ function runDeploymentChecklist() {
   }
   report += hasOnEdit ? '✅ Edit sync trigger installed\n' : '⚠️ Edit sync trigger not installed - Run Reinstall Edit Sync\n';
   
-  // Check 5: Web App URL configured
-  const cfg = ss.getSheetByName(SHEET.CONFIG);
-  const webAppUrl = findConfig(cfg, 'WebAppUrl');
-  if (webAppUrl) {
-    report += '✅ Web App URL configured\n';
-  } else {
-    report += 'ℹ️ Web App URL not saved (optional)\n';
-  }
-  
-  // Check 6: CLIENT_MODE setting
+  // Check 5: CLIENT_MODE setting
   report += '\n📋 Current Mode: ' + (CLIENT_MODE ? '👥 CLIENT MODE (simplified menu)' : '🔧 ADMIN MODE (full access)') + '\n';
   
   report += '\n═══════════════════════════════\n\n';
@@ -396,33 +382,23 @@ function initializeWorkbook() {
   const orderData = ensureSheet(ss, SHEET.ORDER_DATA);
   const price = ensureSheet(ss, SHEET.PRICEBOOK);
   const cust = ensureSheet(ss, SHEET.CUSTOMERS);
-  const arch = ensureSheet(ss, SHEET.ARCHIVE);
-  const cfg = ensureSheet(ss, SHEET.CONFIG);
   const logs = ensureSheet(ss, SHEET.LOGS);
-  const ceoDash = ensureSheet(ss, SHEET.CEO_DASHBOARD);
-  const fieldShop = ensureSheet(ss, SHEET.FIELD_SHOPPING);
-  
-  setConfig(cfg, 'SchemaVersion', CURRENT_SCHEMA_VERSION, 'Current schema version');
   
   orderData.hideSheet();
   
   const MASTER_COLS = ['Order #', 'DocNumber', 'Date', 'BoatID', 'Boat Name', 'Status', 'Items', 'Total $', 'Assigned To', 'Sheet Link', 'Created', 'Last Updated'];
-  const DATA_COLS = ['DocNumber', 'BoatID', 'BoatName', 'Status', 'AssignedTo', 'TxnDate', 'DeliveryDock', 'Item', 'Category', 'Qty', 'Unit', 'BaseCost', 'Markup%', 'Rate', 'Amount', 'TaxCode', 'Notes', 'ExportStatus', 'CreatedAt'];
+  const DATA_COLS = ['DocNumber', 'BoatID', 'BoatName', 'Status', 'AssignedTo', 'TxnDate', 'DeliveryLocation', 'Phone', 'Item', 'Category', 'Qty', 'Unit', 'BaseCost', 'Markup%', 'Rate', 'Amount', 'TaxCode', 'Notes', 'ExportStatus', 'CreatedAt'];
   const PRICE_HEADERS = ['Item', 'Category', 'Unit', 'BasePrice', 'DefaultMarkup%', 'Notes'];
   const CUST_HEADERS = ['BoatID', 'BoatName', 'QB_CustomerName', 'BillingEmail', 'DefaultTerms', 'PIN'];
-  const CFG_HEADERS = ['Key', 'Value', 'Notes'];
   const LOG_HEADERS = ['Timestamp', 'User', 'Action', 'Details', 'Status'];
-  const ARCH_HEADERS = ['DocNumber', 'BoatID', 'BoatName', 'Item', 'Qty', 'Amount', 'ArchivedDate'];
   
   initializeSheetHeaders(orderMaster, MASTER_COLS);
   initializeSheetHeaders(orderData, DATA_COLS);
   initializeSheetHeaders(price, PRICE_HEADERS);
   initializeSheetHeaders(cust, CUST_HEADERS);
-  initializeSheetHeaders(arch, ARCH_HEADERS);
-  initializeSheetHeaders(cfg, CFG_HEADERS);
   initializeSheetHeaders(logs, LOG_HEADERS);
   
-  [orderMaster, orderData, price, cust, arch, logs].forEach(function(s) { s.setFrozenRows(1); });
+  [orderMaster, orderData, price, cust, logs].forEach(function(s) { s.setFrozenRows(1); });
   
   setColumnWidths(orderMaster, 140);
   setColumnWidths(price, 140);
@@ -436,8 +412,6 @@ function initializeWorkbook() {
   convertSheetToTable(cust, 'CustomersTable');
   
   buildOrderMasterSheet(orderMaster);
-  buildCEODashboard(ceoDash);
-  buildFieldShoppingList(fieldShop);
   
   protectHeaders(orderMaster);
   protectHeaders(price);
@@ -618,24 +592,28 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   sheet.getRange('E4').setValue('');
   
   sheet.getRange('D5:E5').setBackground('#e6f4ea');
-  sheet.getRange('D5').setValue('Delivery Dock:').setFontWeight('bold');
-  sheet.getRange('E5').setValue(orderInfo.deliveryDock || '');
+  sheet.getRange('D5').setValue('Delivery Location:').setFontWeight('bold');
+  sheet.getRange('E5').setValue(orderInfo.deliveryLocation || '');
   
   // Right column - Date & Customer Info
   sheet.getRange('G3:H3').setBackground('#f8f9fa');
-  sheet.getRange('G3').setValue('Delivery Date:').setFontWeight('bold');
+  sheet.getRange('G3').setValue('Order Date:').setFontWeight('bold');
   sheet.getRange('H3').setValue(orderInfo.txnDate);
   
   sheet.getRange('G4:H4').setBackground('#ffffff');
-  sheet.getRange('G4').setValue('QB Customer:').setFontWeight('bold');
-  sheet.getRange('H4').setValue(orderInfo.qbCustomerName);
+  sheet.getRange('G4').setValue('Phone:').setFontWeight('bold');
+  sheet.getRange('H4').setValue(orderInfo.phone || '');
   
   sheet.getRange('G5:H5').setBackground('#f8f9fa');
-  sheet.getRange('G5').setValue('Created:').setFontWeight('bold');
-  sheet.getRange('H5').setValue(now);
+  sheet.getRange('G5').setValue('QB Customer:').setFontWeight('bold');
+  sheet.getRange('H5').setValue(orderInfo.qbCustomerName);
+  
+  sheet.getRange('G6:H6').setBackground('#ffffff');
+  sheet.getRange('G6').setValue('Created:').setFontWeight('bold');
+  sheet.getRange('H6').setValue(now);
   
   // Border around info section
-  sheet.getRange('A3:H5').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('A3:H6').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // ========== ITEMS TABLE SECTION ==========
   sheet.getRange('A7:H7').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
@@ -701,8 +679,34 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setBackground('#ffffff')
     .setBorder(true, true, true, true, false, false, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
+  // ========== RECEIPT IMAGES SECTION ==========
+  const receiptRow = notesRow + 5;
+  sheet.getRange(receiptRow, 1, 1, 8).merge().setValue('📸 Receipt Images - Upload or Paste Images Below').setFontWeight('bold').setBackground('#fff3cd').setFontSize(12).setHorizontalAlignment('center');
+  
+  // Large cell for receipt images with instructions
+  const receiptCell = sheet.getRange(receiptRow + 1, 1, 6, 8);
+  receiptCell.merge()
+    .setValue('📋 INSTRUCTIONS:\n\n' +
+      '1. INSERT IMAGE: Right-click here → Insert → Image → Image in cell\n' +
+      '2. PASTE DRIVE LINK: Share receipt image from Google Drive and paste link here\n' +
+      '3. MULTIPLE RECEIPTS: Insert multiple images or separate links with line breaks\n\n' +
+      '💡 TIP: Take photos of receipts immediately after purchase to avoid losing them.')
+    .setWrap(true)
+    .setVerticalAlignment('top')
+    .setBackground('#fffef0')
+    .setFontSize(10)
+    .setFontColor('#5f6368');
+  
+  // Make the cell extra tall for images
+  for (var rowIdx = receiptRow + 1; rowIdx <= receiptRow + 6; rowIdx++) {
+    sheet.setRowHeight(rowIdx, 60);
+  }
+  
+  // Border around receipt section with distinct color
+  sheet.getRange(receiptRow, 1, 7, 8).setBorder(true, true, true, true, true, true, '#f9ab00', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  
   // ========== ACTIONS SECTION ==========
-  const actionsRow = notesRow + 5;
+  const actionsRow = receiptRow + 8;
   sheet.getRange(actionsRow, 1, 1, 8).merge().setValue('⚙️ Actions & Export').setFontWeight('bold').setFontSize(12).setBackground('#f8f9fa');
   
   sheet.getRange(actionsRow + 1, 1).setValue('Export Status:').setFontWeight('bold').setBackground('#ffffff');
@@ -861,8 +865,9 @@ function syncOrderToDataSheet(docNumber) {
   
   const status = orderSheet.getRange('E3').getValue();
   const assignedTo = orderSheet.getRange('E4').getValue();
-  const deliveryDock = orderSheet.getRange('E5').getValue();
+  const deliveryLocation = orderSheet.getRange('E5').getValue();
   const txnDate = orderSheet.getRange('H3').getValue();
+  const phone = orderSheet.getRange('H4').getValue();
   const exportStatus = orderSheet.getRange(exportStatusRow, 2).getValue();
   
   const dataHeaders = dataSheet.getRange(1, 1, 1, dataSheet.getLastColumn()).getValues()[0];
@@ -898,7 +903,8 @@ function syncOrderToDataSheet(docNumber) {
     row[idx['Status']] = status;
     row[idx['AssignedTo']] = assignedTo || '';
     row[idx['TxnDate']] = txnDate;
-    row[idx['DeliveryDock']] = deliveryDock;
+    row[idx['DeliveryLocation']] = deliveryLocation;
+    row[idx['Phone']] = phone || '';
     row[idx['Item']] = itemCode;
     row[idx['Category']] = category;
     row[idx['Qty']] = qty;
@@ -938,10 +944,10 @@ function updateMasterIndex(docNumber, status, itemCount, total, assignedTo) {
       const tz = Session.getScriptTimeZone();
       const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
       
-      // Get delivery date from order sheet
-      const deliveryDate = orderSheet ? orderSheet.getRange('H3').getValue() : data[i][2];
+      // Get order date from order sheet
+      const orderDate = orderSheet ? orderSheet.getRange('H3').getValue() : data[i][2];
       
-      master.getRange(row, 3).setValue(deliveryDate); // Date column
+      master.getRange(row, 3).setValue(orderDate); // Date column
       master.getRange(row, 6).setValue(status); // Status column
       master.getRange(row, 7).setValue(itemCount); // Items column
       master.getRange(row, 8).setValue(total); // Total column
@@ -952,186 +958,6 @@ function updateMasterIndex(docNumber, status, itemCount, total, assignedTo) {
   }
 }
 
-/******** BUILD CEO DASHBOARD ********/
-function buildCEODashboard(sheet) {
-  sheet.clear();
-  
-  // TITLE - Modern style
-  sheet.getRange('A1:F1').merge().setValue('🎯 CEO DASHBOARD - Real-Time Operations Overview');
-  sheet.getRange('A1')
-    .setFontSize(16)
-    .setFontWeight('bold')
-    .setBackground('#1a73e8')
-    .setFontColor('white')
-    .setVerticalAlignment('middle')
-    .setHorizontalAlignment('center');
-  
-  sheet.getRange('A2:B2').merge();
-  sheet.getRange('A2').setValue('📅 Last Updated:').setFontWeight('bold').setBackground('#f8f9fa');
-  sheet.getRange('C2').setFormula('=NOW()').setNumberFormat('yyyy-mm-dd hh:mm:ss').setBackground('#f8f9fa');
-  
-  // METRICS SECTION with modern card design
-  sheet.getRange('A4:B4').merge().setValue('📊 TODAY\'S SNAPSHOT').setFontSize(14).setFontWeight('bold').setBackground('#e8f0fe');
-  
-  const metrics = [
-    ['Metric', 'Value'],
-    ['📦 Total Active Orders', '=COUNTA(_OrderData!A:A)-1'],
-    ['⏳ Orders Pending', '=COUNTIF(_OrderData!D:D,"Pending")'],
-    ['🛒 Orders Shopping', '=COUNTIF(_OrderData!D:D,"Shopping")'],
-    ['🚚 Orders Ready', '=COUNTIF(_OrderData!D:D,"Ready for Delivery")'],
-    ['💰 Revenue (All Orders)', '=SUM(_OrderData!O:O)'],
-    ['📋 Total Line Items', '=COUNTA(_OrderData!H:H)-1']
-  ];
-  
-  const metricsRange = sheet.getRange('A5:B11');
-  metricsRange.setValues(metrics);
-  
-  // Style metrics table
-  sheet.getRange('A5:B5')
-    .setFontWeight('bold')
-    .setBackground('#1a73e8')
-    .setFontColor('white')
-    .setHorizontalAlignment('left');
-  
-  sheet.getRange('B10').setNumberFormat('$#,##0.00');
-  
-  // Alternating row colors for metrics
-  for (var row = 6; row <= 11; row++) {
-    const bgColor = row % 2 === 0 ? '#ffffff' : '#f8f9fa';
-    sheet.getRange(row, 1, 1, 2).setBackground(bgColor);
-  }
-  
-  // ORDERS TABLE with sticky headers
-  sheet.getRange('A13:D13').merge().setValue('📦 ORDERS BY STATUS & BOAT').setFontSize(14).setFontWeight('bold').setBackground('#e8f0fe');
-  
-  const tableHeaders = ['DocNumber', 'Boat', 'Status', 'Assigned To'];
-  const headerRange = sheet.getRange('A14:D14');
-  headerRange
-    .setValues([tableHeaders])
-    .setFontWeight('bold')
-    .setBackground('#1a73e8')
-    .setFontColor('white')
-    .setVerticalAlignment('middle')
-    .setHorizontalAlignment('left');
-  
-  headerRange.setBorder(
-    true, true, true, true, true, true,
-    '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM
-  );
-  
-  sheet.getRange('A15').setFormula('=UNIQUE(_OrderData!A:A)');
-  sheet.getRange('B15').setFormula('=ARRAYFORMULA(IF(A15:A="",,VLOOKUP(A15:A,_OrderData!A:C,3,FALSE)))');
-  sheet.getRange('C15').setFormula('=ARRAYFORMULA(IF(A15:A="",,VLOOKUP(A15:A,_OrderData!A:D,4,FALSE)))');
-  sheet.getRange('D15').setFormula('=ARRAYFORMULA(IF(A15:A="",,VLOOKUP(A15:A,_OrderData!A:E,5,FALSE)))');
-  
-  // FREEZE ROWS for sticky headers
-  sheet.setFrozenRows(14);
-  
-  // Set column widths
-  sheet.setColumnWidth(1, 200); // DocNumber
-  sheet.setColumnWidth(2, 150); // Boat
-  sheet.setColumnWidth(3, 130); // Status
-  sheet.setColumnWidth(4, 130); // Assigned To
-  
-  // Apply banded rows to orders table
-  try {
-    const dataRange = sheet.getRange('A15:D1000');
-    const banding = dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.CYAN, false, false);
-    banding
-      .setFirstRowColor('#ffffff')
-      .setSecondRowColor('#f8f9fa');
-  } catch (e) {
-    // Banding optional
-  }
-}
-
-/******** BUILD SHOPPING LIST ********/
-function buildFieldShoppingList(sheet) {
-  sheet.clear();
-  
-  // TITLE - Green theme for shopping
-  sheet.getRange('A1:G1').merge().setValue('🛒 FIELD SHOPPING LIST - Items Grouped by Category');
-  sheet.getRange('A1')
-    .setFontSize(16)
-    .setFontWeight('bold')
-    .setBackground('#34a853')
-    .setFontColor('white')
-    .setVerticalAlignment('middle')
-    .setHorizontalAlignment('center');
-  
-  // INFO ROW - Light green background
-  sheet.getRange('A2:G2').merge().setValue('📋 This list shows all items from active orders, grouped by category. Shop efficiently by purchasing all items in each category together.');
-  sheet.getRange('A2')
-    .setWrap(true)
-    .setBackground('#e6f4ea')
-    .setFontSize(10)
-    .setVerticalAlignment('middle')
-    .setFontColor('#137333');
-  
-  // TABLE HEADERS with sticky effect
-  const headers = ['Category', 'Item', 'Unit', 'Total Qty Needed', '# of Orders', 'Notes'];
-  const headerRange = sheet.getRange('A4:F4');
-  headerRange
-    .setValues([headers])
-    .setFontWeight('bold')
-    .setBackground('#34a853')
-    .setFontColor('white')
-    .setFontSize(11)
-    .setVerticalAlignment('middle')
-    .setHorizontalAlignment('left');
-  
-  // Add borders to header
-  headerRange.setBorder(
-    true, true, true, true, true, true,
-    '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM
-  );
-  
-  // QUERY for grouped shopping data
-  sheet.getRange('A5').setFormula(`
-    =QUERY(
-      _OrderData!H:K,
-      "SELECT I, H, K, SUM(J), COUNT(H)
-       WHERE H IS NOT NULL
-       GROUP BY I, H, K
-       ORDER BY I, H
-       LABEL I 'Category', H 'Item', K 'Unit', SUM(J) 'Total Qty', COUNT(H) '# Orders'",
-      1
-    )
-  `);
-  
-  // FREEZE ROWS for sticky headers
-  sheet.setFrozenRows(4);
-  
-  // Set column widths for readability
-  sheet.setColumnWidth(1, 150); // Category
-  sheet.setColumnWidth(2, 200); // Item
-  sheet.setColumnWidth(3, 80);  // Unit
-  sheet.setColumnWidth(4, 120); // Total Qty
-  sheet.setColumnWidth(5, 100); // # Orders
-  sheet.setColumnWidth(6, 200); // Notes
-  
-  // Apply banded rows for shopping list
-  try {
-    const dataRange = sheet.getRange('A5:F1000');
-    const banding = dataRange.applyRowBanding(SpreadsheetApp.BandingTheme.GREEN, false, false);
-    banding
-      .setFirstRowColor('#ffffff')
-      .setSecondRowColor('#f1f8f4');
-  } catch (e) {
-    // Banding optional
-  }
-  
-  // Add filter to shopping list
-  try {
-    if (sheet.getFilter()) {
-      sheet.getFilter().remove();
-    }
-    sheet.getRange('A4:F1000').createFilter();
-  } catch (e) {
-    // Filter optional
-  }
-}
-
 /******** FORM SUBMISSION ********/
 function onFormSubmit(e) {
   try {
@@ -1139,8 +965,9 @@ function onFormSubmit(e) {
     
     const boatRaw = first(named['Boat (BoatID)']);
     const pin = first(named['PIN']);
-    const deliveryDock = first(named['Delivery Dock / Location']);
-    const reqDate = first(named['Requested Delivery Date']);
+    const deliveryLocation = first(named['Delivery Location']) || first(named['Delivery Dock / Location']) || '';
+    const phone = first(named['Phone Number']) || '';
+    const reqDate = first(named['Date']) || first(named['Requested Delivery Date']);
     const notes = first(named['Notes / Special Instructions']) || '';
     const additionalNotes = first(named['Additional Notes or Substitutions']) || '';
     const finalNotes = [notes, additionalNotes].filter(Boolean).join(' | ');
@@ -1189,7 +1016,8 @@ function onFormSubmit(e) {
       boatName: customer.boatName,
       qbCustomerName: customer.qbCustomerName || customer.boatName,
       txnDate: txnDate,
-      deliveryDock: deliveryDock,
+      deliveryLocation: deliveryLocation,
+      phone: phone,
       notes: finalNotes,
       items: items
     };
@@ -1209,55 +1037,40 @@ function onFormSubmit(e) {
 /******** WEB APP DEPLOYMENT INFO ********/
 function showWebAppDeploymentInstructions() {
   const ui = SpreadsheetApp.getUi();
-  const cfg = SpreadsheetApp.getActive().getSheetByName(SHEET.CONFIG);
-  const webAppUrl = findConfig(cfg, 'WebAppUrl');
   
   const instructions = 'WEB APP DEPLOYMENT INSTRUCTIONS:\n\n' +
     '1. In Apps Script editor, click "Deploy" > "New deployment"\n' +
     '2. Click gear icon ⚙️ next to "Select type"\n' +
     '3. Choose "Web app"\n' +
     '4. Settings:\n' +
-    '   - Description: Tug Ops Order Form\n' +
+    '   - Description: Dupuys Order Form\n' +
     '   - Execute as: Me\n' +
     '   - Who has access: Anyone\n' +
     '5. Click "Deploy"\n' +
     '6. Copy the Web app URL\n' +
-    '7. Click "OK" below and paste the URL\n\n' +
-    (webAppUrl ? 'Current URL: ' + webAppUrl : 'No URL saved yet');
+    '7. Share it with boat captains\n\n' +
+    'Note: Store the URL somewhere safe for reference.';
   
-  const response = ui.alert('Web App Deployment', instructions, ui.ButtonSet.OK_CANCEL);
-  
-  if (response === ui.Button.OK) {
-    const urlResponse = ui.prompt('Save Web App URL', 'Paste your Web App URL here:', ui.ButtonSet.OK_CANCEL);
-    if (urlResponse.getSelectedButton() === ui.Button.OK) {
-      const url = urlResponse.getResponseText().trim();
-      setConfig(cfg, 'WebAppUrl', url, 'Deployed web app URL');
-      ui.alert('✅ Web App URL saved! Share this with your boat captains:\n\n' + url);
-    }
-  }
+  ui.alert('Web App Deployment', instructions, ui.ButtonSet.OK);
 }
 
 function getWebAppUrl() {
-  const cfg = SpreadsheetApp.getActive().getSheetByName(SHEET.CONFIG);
-  const url = findConfig(cfg, 'WebAppUrl');
-  if (url) {
-    SpreadsheetApp.getUi().alert('Your Web App URL:\n\n' + url + '\n\nShare this link with boat captains to place orders.');
-  } else {
-    SpreadsheetApp.getUi().alert('No Web App URL saved yet.\n\nUse "Deploy Web App" from the menu first.');
-  }
+  const ui = SpreadsheetApp.getUi();
+  ui.alert(
+    'Web App URL',
+    'To get your Web App URL:\n\n' +
+    '1. Extensions > Apps Script\n' +
+    '2. Click "Deploy" > "Manage deployments"\n' +
+    '3. Click on the active web app deployment\n' +
+    '4. Copy the "Web app URL"\n\n' +
+    'Share that URL with boat captains to place orders.',
+    ui.ButtonSet.OK
+  );
 }
 
 /******** NAVIGATION ********/
 function openOrderMaster() {
   SpreadsheetApp.getActive().setActiveSheet(SpreadsheetApp.getActive().getSheetByName(SHEET.ORDER_MASTER));
-}
-
-function openCEODashboard() {
-  SpreadsheetApp.getActive().setActiveSheet(SpreadsheetApp.getActive().getSheetByName(SHEET.CEO_DASHBOARD));
-}
-
-function openShoppingList() {
-  SpreadsheetApp.getActive().setActiveSheet(SpreadsheetApp.getActive().getSheetByName(SHEET.FIELD_SHOPPING));
 }
 
 function refreshAllDashboards() {
@@ -1320,13 +1133,11 @@ function convertAllToTables() {
   const orderData = ss.getSheetByName(SHEET.ORDER_DATA);
   const price = ss.getSheetByName(SHEET.PRICEBOOK);
   const cust = ss.getSheetByName(SHEET.CUSTOMERS);
-  const arch = ss.getSheetByName(SHEET.ARCHIVE);
   const logs = ss.getSheetByName(SHEET.LOGS);
   
   convertSheetToTable(orderData, 'OrderDataTable');
   convertSheetToTable(price, 'PriceBookTable');
   convertSheetToTable(cust, 'CustomersTable');
-  convertSheetToTable(arch, 'ArchiveTable');
   convertSheetToTable(logs, 'LogsTable');
   
   uiToast('✅ Converted data sheets to table format with filters and banding');
@@ -1510,15 +1321,16 @@ function installOnEditTrigger() {
  * AUTOMATIC SYNC BETWEEN ORDER_MASTER AND ORDER SHEETS
  * 
  * ORDER_MASTER → Order Sheet:
- *   - Date (Col 3) → H3 (Delivery Date)
+ *   - Date (Col 3) → H3 (Order Date)
  *   - Status (Col 6) → E3 (Status dropdown)
  *   - Assigned (Col 9) → E4 (Assigned To)
  * 
  * Order Sheet → ORDER_MASTER + _OrderData:
  *   - E3 (Status) → Col 6 + syncs full order data
  *   - E4 (Assigned To) → Col 9 + syncs full order data
- *   - E5 (Delivery Dock) → syncs to _OrderData
- *   - H3 (Delivery Date) → Col 3 + syncs to _OrderData
+ *   - E5 (Delivery Location) → syncs to _OrderData
+ *   - H3 (Order Date) → Col 3 + syncs to _OrderData
+ *   - H4 (Phone) → syncs to _OrderData
  *   - F (Base Cost) → recalculates total, syncs to _OrderData
  *   - E (Qty) → recalculates total, syncs to _OrderData
  *   - G (Markup%) → recalculates total, syncs to _OrderData
@@ -1636,16 +1448,22 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
       logAction('Sync', 'Sheet→Master: Item data updated for ' + docNumber, 'Info');
     }
     
-    // Delivery Date changed (H3)
+    // Order Date changed (H3)
     if (row === 3 && col === 8) {
       shouldSync = true;
-      logAction('Sync', 'Sheet→Master: Delivery date for ' + docNumber, 'Info');
+      logAction('Sync', 'Sheet→Master: Order date for ' + docNumber, 'Info');
     }
     
-    // Delivery Dock changed (E5)
+    // Phone changed (H4)
+    if (row === 4 && col === 8) {
+      shouldSync = true;
+      logAction('Sync', 'Sheet→Data: Phone for ' + docNumber, 'Info');
+    }
+    
+    // Delivery Location changed (E5)
     if (row === 5 && col === 5) {
       shouldSync = true;
-      logAction('Sync', 'Sheet→Master: Delivery dock for ' + docNumber, 'Info');
+      logAction('Sync', 'Sheet→Data: Delivery location for ' + docNumber, 'Info');
     }
     
     if (shouldSync) {
@@ -1792,7 +1610,7 @@ function exportOrders(mode, singleDocNumber) {
           boatName: String(row[idx['BoatName']]).trim(),
           status: String(row[idx['Status']]).trim(),
           txnDate: String(row[idx['TxnDate']]).trim(),
-          deliveryDock: String(row[idx['DeliveryDock']]).trim(),
+          deliveryLocation: String(row[idx['DeliveryLocation']]).trim(),
           item: String(row[idx['Item']]).trim(),
           qty: Number(row[idx['Qty']]) || 0,
           baseCost: baseCost,
@@ -1811,7 +1629,7 @@ function exportOrders(mode, singleDocNumber) {
           boatName: String(row[idx['BoatName']]).trim(),
           status: String(row[idx['Status']]).trim(),
           txnDate: String(row[idx['TxnDate']]).trim(),
-          deliveryDock: String(row[idx['DeliveryDock']]).trim(),
+          deliveryLocation: String(row[idx['DeliveryLocation']]).trim(),
           item: String(row[idx['Item']]).trim(),
           qty: Number(row[idx['Qty']]) || 0,
           baseCost: baseCost,
@@ -1846,7 +1664,7 @@ function exportOrders(mode, singleDocNumber) {
         txnDate: line.txnDate,
         terms: customer ? customer.defaultTerms : 'Net 7',
         memo: line.notes,
-        class: line.deliveryDock,
+        class: line.deliveryLocation,
         lines: []
       };
     }
@@ -2004,11 +1822,126 @@ function buildQbdIif(invoices) {
   return lines.join('\n');
 }
 
-/******** ARCHIVE EXPORTED ORDERS ********/
+/******** ARCHIVE HELPER - GET OR CREATE ARCHIVE FOLDER ********/
+function getArchiveFolder() {
+  const ss = SpreadsheetApp.getActive();
+  const ssFile = DriveApp.getFileById(ss.getId());
+  const parentFolders = ssFile.getParents();
+  
+  // Get the parent folder of the spreadsheet (or root if none)
+  const parentFolder = parentFolders.hasNext() ? parentFolders.next() : DriveApp.getRootFolder();
+  
+  // Look for existing Archive folder
+  const existingFolders = parentFolder.getFoldersByName('Archived Orders');
+  if (existingFolders.hasNext()) {
+    return existingFolders.next();
+  }
+  
+  // Create new Archive folder
+  return parentFolder.createFolder('Archived Orders');
+}
+
+/******** ARCHIVE SINGLE ORDER TO DRIVE ********/
+function archiveOrderToDrive(docNumber) {
+  const ss = SpreadsheetApp.getActive();
+  const orderSheet = ss.getSheetByName(ORDER_SHEET_PREFIX + docNumber);
+  
+  if (!orderSheet) {
+    logAction('Archive', 'Order sheet not found: ' + docNumber, 'Failed');
+    return false;
+  }
+  
+  try {
+    // Get or create archive folder
+    const archiveFolder = getArchiveFolder();
+    
+    // Create a new spreadsheet for this order
+    const newSS = SpreadsheetApp.create(docNumber);
+    const newFile = DriveApp.getFileById(newSS.getId());
+    
+    // Move to archive folder
+    archiveFolder.addFile(newFile);
+    DriveApp.getRootFolder().removeFile(newFile);
+    
+    // Copy the order sheet to the new spreadsheet using copyTo method
+    const copiedSheet = orderSheet.copyTo(newSS);
+    copiedSheet.setName(docNumber);
+    
+    // Delete the default sheet
+    const defaultSheet = newSS.getSheets()[0];
+    if (defaultSheet.getName() !== docNumber) {
+      newSS.deleteSheet(defaultSheet);
+    }
+    
+    // Flush changes to ensure everything is saved
+    SpreadsheetApp.flush();
+    
+    logAction('Archive', 'Archived ' + docNumber + ' to Drive: ' + newFile.getUrl(), 'Success');
+    return newFile.getUrl();
+    
+  } catch (err) {
+    logAction('Archive', 'Failed to archive ' + docNumber + ': ' + String(err), 'Failed');
+    return false;
+  }
+}
+
+/******** ARCHIVE CURRENT ORDER ********/
+function archiveCurrentOrder() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getActiveSheet();
+  const sheetName = sheet.getName();
+  
+  if (sheetName.indexOf(ORDER_SHEET_PREFIX) !== 0) {
+    SpreadsheetApp.getUi().alert('⚠️ Please open an order sheet first (ORDER_TB-...)');
+    return;
+  }
+  
+  const docNumber = sheetName.replace(ORDER_SHEET_PREFIX, '');
+  
+  const response = SpreadsheetApp.getUi().alert(
+    'Archive Current Order',
+    'Archive order: ' + docNumber + '?\n\nThis will:\n' +
+    '1. Create a new Google Sheet in "Archived Orders" folder\n' +
+    '2. Copy all order data to the new sheet\n' +
+    '3. Delete from this workbook\n' +
+    '4. Remove from ORDER_MASTER\n\n' +
+    'Continue?',
+    SpreadsheetApp.getUi().ButtonSet.YES_NO
+  );
+  
+  if (response !== SpreadsheetApp.getUi().Button.YES) return;
+  
+  // Archive to Drive
+  const archiveUrl = archiveOrderToDrive(docNumber);
+  
+  if (!archiveUrl) {
+    SpreadsheetApp.getUi().alert('❌ Failed to archive order. Check Logs sheet for details.');
+    return;
+  }
+  
+  // Delete from current workbook
+  ss.deleteSheet(sheet);
+  
+  // Remove from ORDER_MASTER
+  removeFromOrderMaster([docNumber]);
+  
+  // Remove from _OrderData
+  removeFromOrderData([docNumber]);
+  
+  SpreadsheetApp.getUi().alert(
+    '✅ Order Archived!',
+    'Order ' + docNumber + ' has been archived.\n\n' +
+    'Archived file location:\n' +
+    archiveUrl + '\n\n' +
+    'The order has been removed from this workbook.',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/******** ARCHIVE ALL EXPORTED ORDERS ********/
 function archiveExported() {
   const ss = SpreadsheetApp.getActive();
   const dataSheet = ss.getSheetByName(SHEET.ORDER_DATA);
-  const archiveSheet = ss.getSheetByName(SHEET.ARCHIVE);
   
   if (!dataSheet || dataSheet.getLastRow() < 2) {
     SpreadsheetApp.getUi().alert('⚠️ No orders to archive');
@@ -2020,127 +1953,146 @@ function archiveExported() {
   const idx = makeHeaderIndex(headers);
   
   // Find exported orders
-  const exportedDocs = {};
+  const exportedDocs = [];
   for (var i = 0; i < allData.length; i++) {
     const row = allData[i];
     const exportStatus = String(row[idx['ExportStatus']]).trim();
     if (exportStatus === 'Exported') {
       const docNum = String(row[idx['DocNumber']]).trim();
-      if (docNum) {
-        exportedDocs[docNum] = {
-          boatId: String(row[idx['BoatID']]).trim(),
-          boatName: String(row[idx['BoatName']]).trim()
-        };
+      if (docNum && exportedDocs.indexOf(docNum) === -1) {
+        exportedDocs.push(docNum);
       }
     }
   }
   
-  const docCount = Object.keys(exportedDocs).length;
-  if (docCount === 0) {
+  if (exportedDocs.length === 0) {
     SpreadsheetApp.getUi().alert('⚠️ No exported orders to archive');
     return;
   }
   
   const response = SpreadsheetApp.getUi().alert(
-    'Archive Exported Orders',
-    'Found ' + docCount + ' exported order(s).\n\nThis will:\n' +
-    '1. Copy order data to Archive sheet\n' +
-    '2. Delete individual order sheets\n' +
-    '3. Remove from ORDER_MASTER\n\n' +
+    'Archive All Exported Orders',
+    'Found ' + exportedDocs.length + ' exported order(s).\n\nThis will:\n' +
+    '1. Create new Google Sheets in "Archived Orders" folder\n' +
+    '2. Copy each order to its own new sheet\n' +
+    '3. Delete from this workbook\n' +
+    '4. Remove from ORDER_MASTER\n\n' +
     'Continue?',
     SpreadsheetApp.getUi().ButtonSet.YES_NO
   );
   
   if (response !== SpreadsheetApp.getUi().Button.YES) return;
   
-  const tz = Session.getScriptTimeZone();
-  const archiveDate = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
+  // Archive each order to Drive
+  var archivedCount = 0;
+  var failedCount = 0;
+  var archiveUrls = [];
   
-  // Archive to Archive sheet
-  for (var docNum in exportedDocs) {
-    const orderData = allData.filter(function(row) {
-      return String(row[idx['DocNumber']]).trim() === docNum;
-    });
+  for (var i = 0; i < exportedDocs.length; i++) {
+    const docNum = exportedDocs[i];
+    const archiveUrl = archiveOrderToDrive(docNum);
     
-    for (var j = 0; j < orderData.length; j++) {
-      const row = orderData[j];
-      archiveSheet.appendRow([
-        docNum,
-        row[idx['BoatID']],
-        row[idx['BoatName']],
-        row[idx['Item']],
-        row[idx['Qty']],
-        row[idx['Amount']],
-        archiveDate
-      ]);
-    }
-    
-    // Delete order sheet
-    const orderSheet = ss.getSheetByName(ORDER_SHEET_PREFIX + docNum);
-    if (orderSheet) {
-      ss.deleteSheet(orderSheet);
+    if (archiveUrl) {
+      archiveUrls.push(docNum + ': ' + archiveUrl);
+      archivedCount++;
+      
+      // Delete order sheet from workbook
+      const orderSheet = ss.getSheetByName(ORDER_SHEET_PREFIX + docNum);
+      if (orderSheet) {
+        ss.deleteSheet(orderSheet);
+      }
+    } else {
+      failedCount++;
     }
   }
   
-  // Remove from ORDER_MASTER
+  // Remove archived orders from ORDER_MASTER and _OrderData
+  if (archivedCount > 0) {
+    removeFromOrderMaster(exportedDocs);
+    removeFromOrderData(exportedDocs);
+  }
+  
+  logAction('Archive', 'Archived ' + archivedCount + ' order(s), ' + failedCount + ' failed', 'Success');
+  
+  var message = '✅ Archive Complete!\n\n' +
+    'Successfully archived: ' + archivedCount + ' order(s)\n';
+  
+  if (failedCount > 0) {
+    message += 'Failed: ' + failedCount + ' order(s)\n';
+  }
+  
+  message += '\n📁 Orders saved to "Archived Orders" folder\n' +
+    '🗑️ Orders removed from this workbook\n\n';
+  
+  if (archiveUrls.length > 0 && archiveUrls.length <= 5) {
+    message += 'Archived files:\n' + archiveUrls.join('\n');
+  } else if (archiveUrls.length > 5) {
+    message += 'View archived files in the "Archived Orders" folder.';
+  }
+  
+  SpreadsheetApp.getUi().alert('Archive Complete', message, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/******** REMOVE FROM ORDER MASTER ********/
+function removeFromOrderMaster(docNumbers) {
+  const ss = SpreadsheetApp.getActive();
   const master = ss.getSheetByName(SHEET.ORDER_MASTER);
-  if (master && master.getLastRow() > 5) {
-    const masterData = master.getRange(6, 1, master.getLastRow() - 5, master.getLastColumn()).getValues();
-    const keepRows = [master.getRange(1, 1, 5, master.getLastColumn()).getValues()];
-    
-    for (var i = 0; i < masterData.length; i++) {
-      const docNum = String(masterData[i][1]).trim();
-      if (!exportedDocs[docNum]) {
-        keepRows.push([masterData[i]]);
-      }
+  
+  if (!master || master.getLastRow() <= 5) return;
+  
+  // Get header rows (1-5) and data rows (6+)
+  const headerRows = master.getRange(1, 1, 5, master.getLastColumn()).getValues();
+  const dataRows = master.getRange(6, 1, master.getLastRow() - 5, master.getLastColumn()).getValues();
+  
+  // Filter out the orders to be archived
+  const keepDataRows = [];
+  for (var i = 0; i < dataRows.length; i++) {
+    const docNum = String(dataRows[i][1]).trim(); // DocNumber is in column 2 (index 1)
+    if (docNumbers.indexOf(docNum) === -1) {
+      keepDataRows.push(dataRows[i]);
     }
-    
-    master.clearContents();
-    if (keepRows.length > 0) {
-      const flatRows = [];
-      for (var k = 0; k < keepRows.length; k++) {
-        if (Array.isArray(keepRows[k][0])) {
-          for (var m = 0; m < keepRows[k].length; m++) {
-            flatRows.push(keepRows[k][m]);
-          }
-        } else {
-          flatRows.push(keepRows[k]);
-        }
-      }
-      master.getRange(1, 1, flatRows.length, master.getLastColumn()).setValues(flatRows);
-    }
-    // DON'T rebuild ORDER_MASTER - it would wipe out all remaining orders!
-    // Just reapply formatting to keep it clean
-    master.getRange('A1:L1').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold').setFontSize(16);
-    master.getRange('A2:L2').setBackground('#e8f0fe');
-    master.getRange('A5:L5').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold');
-    master.getRange('H:H').setNumberFormat('$#,##0.00');
-    master.setFrozenRows(5);
   }
   
-  // Clean up _OrderData
-  const nonExportedData = allData.filter(function(row) {
-    const exportStatus = String(row[idx['ExportStatus']]).trim();
-    return exportStatus !== 'Exported';
+  // Clear the sheet
+  master.clear();
+  
+  // Rebuild: Write headers first (rows 1-5)
+  master.getRange(1, 1, headerRows.length, headerRows[0].length).setValues(headerRows);
+  
+  // Then write kept data rows (starting at row 6)
+  if (keepDataRows.length > 0) {
+    master.getRange(6, 1, keepDataRows.length, keepDataRows[0].length).setValues(keepDataRows);
+  }
+  
+  // Reapply formatting
+  master.getRange('A1:L1').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold').setFontSize(16);
+  master.getRange('A2:L2').setBackground('#e8f0fe');
+  master.getRange('A5:L5').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold');
+  master.getRange('H:H').setNumberFormat('$#,##0.00');
+  master.setFrozenRows(5);
+}
+
+/******** REMOVE FROM ORDER DATA ********/
+function removeFromOrderData(docNumbers) {
+  const ss = SpreadsheetApp.getActive();
+  const dataSheet = ss.getSheetByName(SHEET.ORDER_DATA);
+  
+  if (!dataSheet || dataSheet.getLastRow() < 2) return;
+  
+  const allData = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, dataSheet.getLastColumn()).getValues();
+  const headers = dataSheet.getRange(1, 1, 1, dataSheet.getLastColumn()).getValues()[0];
+  const idx = makeHeaderIndex(headers);
+  
+  const keepData = allData.filter(function(row) {
+    const docNum = String(row[idx['DocNumber']]).trim();
+    return docNumbers.indexOf(docNum) === -1;
   });
   
   dataSheet.clearContents();
   dataSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  if (nonExportedData.length > 0) {
-    dataSheet.getRange(2, 1, nonExportedData.length, headers.length).setValues(nonExportedData);
+  if (keepData.length > 0) {
+    dataSheet.getRange(2, 1, keepData.length, headers.length).setValues(keepData);
   }
-  
-  logAction('Archive', 'Archived ' + docCount + ' order(s)', 'Success');
-  
-  SpreadsheetApp.getUi().alert(
-    '✅ Archive Complete!',
-    'Archived ' + docCount + ' order(s).\n\n' +
-    '• Order data saved to Archive sheet\n' +
-    '• Individual order sheets deleted\n' +
-    '• Removed from ORDER_MASTER\n\n' +
-    'Your workbook is now clean!',
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
 }
 
 /******** EXPORT HELPER FUNCTIONS ********/
@@ -2222,8 +2174,9 @@ function submitWebAppOrder(orderData) {
       boatId: orderData.boatId,
       boatName: customer.boatName,
       qbCustomerName: customer.qbCustomerName || customer.boatName,
-      txnDate: orderData.deliveryDate || todayYMD(),
-      deliveryDock: orderData.deliveryDock || '',
+      txnDate: orderData.orderDate || todayYMD(),
+      deliveryLocation: orderData.deliveryLocation || '',
+      phone: orderData.phone || '',
       notes: orderData.notes || '',
       items: items
     };
@@ -2357,7 +2310,8 @@ function calculateOrderSheetPositions(orderSheet) {
     // Calculate positions based on actual content
     const totalsRow = lastItemRow + 2;
     const notesRow = totalsRow + 2;
-    const actionsRow = notesRow + 5;
+    const receiptSectionRow = notesRow + 5;
+    const actionsRow = receiptSectionRow + 8; // Receipt section is 7 rows (1 header + 6 content) + 1 spacer
     const exportStatusRow = actionsRow + 1;
     const receiptLinkRow = actionsRow + 2;
     const qbExportLinkRow = actionsRow + 3;
@@ -2366,6 +2320,7 @@ function calculateOrderSheetPositions(orderSheet) {
       lastItemRow: lastItemRow,
       totalsRow: totalsRow,
       notesRow: notesRow,
+      receiptSectionRow: receiptSectionRow,
       actionsRow: actionsRow,
       exportStatusRow: exportStatusRow,
       receiptLinkRow: receiptLinkRow,
@@ -2379,10 +2334,11 @@ function calculateOrderSheetPositions(orderSheet) {
       lastItemRow: 20,
       totalsRow: 22,
       notesRow: 24,
-      actionsRow: 29,
-      exportStatusRow: 30,
-      receiptLinkRow: 31,
-      qbExportLinkRow: 32
+      receiptSectionRow: 29,
+      actionsRow: 37,
+      exportStatusRow: 38,
+      receiptLinkRow: 39,
+      qbExportLinkRow: 40
     };
   }
 }
@@ -2453,28 +2409,6 @@ function logAction(action, details, status) {
   } catch (e) {}
 }
 
-function findConfig(cfgSheet, key) {
-  if (!cfgSheet) return '';
-  const vals = cfgSheet.getDataRange().getValues();
-  for (var i = 1; i < vals.length; i++) {
-    if (String(vals[i][0]) === key) return String(vals[i][1] || '');
-  }
-  return '';
-}
-
-function setConfig(cfgSheet, key, value, notes) {
-  if (!cfgSheet) return;
-  const vals = cfgSheet.getRange(1, 1, Math.max(1, cfgSheet.getLastRow()), 3).getValues();
-  for (var i = 1; i < vals.length; i++) {
-    if (String(vals[i][0]) === key) {
-      cfgSheet.getRange(i + 1, 2).setValue(value);
-      if (notes) cfgSheet.getRange(i + 1, 3).setValue(notes);
-      return;
-    }
-  }
-  cfgSheet.appendRow([key, value, notes || '']);
-}
-
 function testWebAppConnection() {
   const boats = DataLayer.getCustomers();
   const items = DataLayer.getPriceBookItems();
@@ -2498,42 +2432,35 @@ function testWebAppConnection() {
 /******** WEB APP DEPLOYMENT INFO ********/
 function showWebAppDeploymentInstructions() {
   const ui = SpreadsheetApp.getUi();
-  const cfg = SpreadsheetApp.getActive().getSheetByName(SHEET.CONFIG);
-  const webAppUrl = findConfig(cfg, 'WebAppUrl');
   
   const instructions = 'WEB APP DEPLOYMENT INSTRUCTIONS:\n\n' +
     '1. In Apps Script editor, click "Deploy" > "New deployment"\n' +
     '2. Click gear icon ⚙️ next to "Select type"\n' +
     '3. Choose "Web app"\n' +
     '4. Settings:\n' +
-    '   - Description: Tug Ops Order Form\n' +
+    '   - Description: Dupuys Order Form\n' +
     '   - Execute as: Me\n' +
     '   - Who has access: Anyone\n' +
     '5. Click "Deploy"\n' +
     '6. Copy the Web app URL\n' +
-    '7. Click "OK" below and paste the URL\n\n' +
-    (webAppUrl ? 'Current URL: ' + webAppUrl : 'No URL saved yet');
+    '7. Share it with boat captains\n\n' +
+    'Note: Store the URL somewhere safe for reference.';
   
-  const response = ui.alert('Web App Deployment', instructions, ui.ButtonSet.OK_CANCEL);
-  
-  if (response === ui.Button.OK) {
-    const urlResponse = ui.prompt('Save Web App URL', 'Paste your Web App URL here:', ui.ButtonSet.OK_CANCEL);
-    if (urlResponse.getSelectedButton() === ui.Button.OK) {
-      const url = urlResponse.getResponseText().trim();
-      setConfig(cfg, 'WebAppUrl', url, 'Deployed web app URL');
-      ui.alert('✅ Web App URL saved! Share this with your boat captains:\n\n' + url);
-    }
-  }
+  ui.alert('Web App Deployment', instructions, ui.ButtonSet.OK);
 }
 
 function getWebAppUrl() {
-  const cfg = SpreadsheetApp.getActive().getSheetByName(SHEET.CONFIG);
-  const url = findConfig(cfg, 'WebAppUrl');
-  if (url) {
-    SpreadsheetApp.getUi().alert('Your Web App URL:\n\n' + url + '\n\nShare this link with boat captains to place orders.');
-  } else {
-    SpreadsheetApp.getUi().alert('No Web App URL saved yet.\n\nUse "Deploy Web App" from the menu first.');
-  }
+  const ui = SpreadsheetApp.getUi();
+  ui.alert(
+    'Web App URL',
+    'To get your Web App URL:\n\n' +
+    '1. Extensions > Apps Script\n' +
+    '2. Click "Deploy" > "Manage deployments"\n' +
+    '3. Click on the active web app deployment\n' +
+    '4. Copy the "Web app URL"\n\n' +
+    'Share that URL with boat captains to place orders.',
+    ui.ButtonSet.OK
+  );
 }
 
 /*************************************************
@@ -2635,6 +2562,7 @@ function getWebAppUrl() {
 // ✅ Modern color-coded design
 // ✅ Yellow-highlighted entry fields
 // ✅ Automatic calculations
+// ✅ Receipt image upload section
 // ✅ QB export (Online & Desktop)
 // ✅ Web App for boat captains
 // ✅ CEO Dashboard with metrics
@@ -2648,11 +2576,12 @@ function getWebAppUrl() {
 // 1. Orders arrive → Hidden sheets created automatically
 // 2. View in Order Master → Click "📄 Open Order" links
 // 3. Fill in Base Cost (yellow column) as you shop
-// 4. Update Status dropdown (Pending → Shopping → Delivered)
-// 5. Changes sync instantly to Master & Dashboard
-// 6. Set Export Status = "Ready" when complete
-// 7. Export to QuickBooks (batch or individual)
-// 8. Archive exported orders to clean up
+// 4. Upload receipt images in Receipt Images section
+// 5. Update Status dropdown (Pending → Shopping → Delivered)
+// 6. Changes sync instantly to Master & Dashboard
+// 7. Set Export Status = "Ready" when complete
+// 8. Export to QuickBooks (batch or individual)
+// 9. Archive orders to Drive folder (current or all exported)
 
 /*************************************************
  * ADMIN TASKS (Via Apps Script Editor):

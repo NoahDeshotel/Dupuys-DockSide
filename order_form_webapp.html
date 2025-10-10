@@ -252,12 +252,12 @@
           <input id="email" type="email" placeholder="captain@dockside.com" required />
         </div>
         <div>
-          <label for="deliveryDock">Delivery Dock <span style="color:var(--danger)">*</span></label>
-          <input id="deliveryDock" placeholder="e.g., Dock 3" required />
+          <label for="phone">Phone Number</label>
+          <input id="phone" type="tel" placeholder="e.g., (555) 123-4567" />
         </div>
         <div>
-          <label for="deliveryDate">Delivery Date <span style="color:var(--danger)">*</span></label>
-          <input id="deliveryDate" type="date" required />
+          <label for="deliveryLocation">Delivery Location</label>
+          <input id="deliveryLocation" placeholder="e.g., Dock 3, Marina A" />
         </div>
         <div style="grid-column:1/-1">
           <label for="notes">Special Instructions</label>
@@ -313,9 +313,9 @@
       <div class="glass-card" style="margin:12px 0;">
         <div class="review-grid">
           <div><strong>Boat:</strong> <span id="revBoat">—</span></div>
-          <div><strong>Dock:</strong> <span id="revDock">—</span></div>
-          <div><strong>Date:</strong> <span id="revDate">—</span></div>
           <div><strong>Email:</strong> <span id="revEmail">—</span></div>
+          <div><strong>Phone:</strong> <span id="revPhone">—</span></div>
+          <div><strong>Location:</strong> <span id="revLocation">—</span></div>
           <div style="grid-column:1/-1"><strong>Notes:</strong> <span id="revNotes">—</span></div>
         </div>
       </div>
@@ -333,7 +333,7 @@
     let itemsByCategory = Object.create(null);
     const cart = Object.create(null);
     let currentCat = 'all';
-    const orderInfo = { boatId:'', pin:'', email:'', deliveryDock:'', deliveryDate:'', notes:'' };
+    const orderInfo = { boatId:'', pin:'', email:'', phone:'', deliveryLocation:'', notes:'' };
 
     // ===== DOM =====
     const $ = (s, r=document)=>r.querySelector(s);
@@ -377,14 +377,11 @@
       itemsByCategory = Object.create(null);
       for(const it of allItems){ const c= it.category || 'Other'; (itemsByCategory[c] ||= []).push(it); }
       for(const c in itemsByCategory){ itemsByCategory[c].sort((a,b)=> a.name.localeCompare(b.name)); }
-      // gate: wait for info before showing shop
-      const dateInput = $('#deliveryDate');
-      if (dateInput) dateInput.min = new Date().toISOString().split('T')[0];
       updateContinueState();
     }
 
     // ===== Info gating =====
-    ;['boatSelect','pin','email','deliveryDock','deliveryDate','notes'].forEach(id=>{
+    ;['boatSelect','pin','email','phone','deliveryLocation','notes'].forEach(id=>{
       const el = document.getElementById(id);
       if(!el) return;
       el.addEventListener('input', updateContinueState);
@@ -395,10 +392,10 @@
       orderInfo.boatId = $('#boatSelect').value.trim();
       orderInfo.pin = $('#pin').value.trim();
       orderInfo.email = $('#email').value.trim();
-      orderInfo.deliveryDock = $('#deliveryDock').value.trim();
-      orderInfo.deliveryDate = $('#deliveryDate').value;
+      orderInfo.phone = $('#phone').value.trim();
+      orderInfo.deliveryLocation = $('#deliveryLocation').value.trim();
       orderInfo.notes = $('#notes').value.trim();
-      const ok = !!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate);
+      const ok = !!(orderInfo.boatId && orderInfo.pin && orderInfo.email);
       continueBtn.disabled = !ok;
     }
 
@@ -512,7 +509,7 @@
 
     function openModal(){
       if(!Object.keys(cart).length){ alert('Add items first'); return; }
-      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate)){
+      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email)){
         alert('Please complete boat info first'); return; }
 
       reviewList.innerHTML='';
@@ -524,9 +521,9 @@
         reviewList.appendChild(row);
       }
       $('#revBoat').textContent = orderInfo.boatId;
-      $('#revDock').textContent = orderInfo.deliveryDock || '—';
-      $('#revDate').textContent = orderInfo.deliveryDate || '—';
       $('#revEmail').textContent = orderInfo.email || '—';
+      $('#revPhone').textContent = orderInfo.phone || '—';
+      $('#revLocation').textContent = orderInfo.deliveryLocation || '—';
       $('#revNotes').textContent = orderInfo.notes || '—';
 
       subtotal.textContent = `$${total.toFixed(2)}`;
@@ -536,14 +533,14 @@
     function closeModal(){ modal.hidden=true; modal.removeAttribute('open'); }
 
     function submitOrder(){
-      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate)){
+      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email)){
         toast('Please complete boat info', false); return; }
       const items = Object.entries(cart).map(([code,qty])=>({code,qty}));
       const btn=$('#submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
       google.script.run
         .withSuccessHandler(res=>{ if(res&&res.success){ toast('Order submitted! #'+res.docNumber,true); setTimeout(()=>window.location.reload(),1000);} else { toast('Error: '+(res?.error||'Unknown')); btn.disabled=false; btn.textContent='Submit Order'; } })
         .withFailureHandler(err=>{ toast('Error: '+err); btn.disabled=false; btn.textContent='Submit Order'; })
-        .submitWebAppOrder({ boatId: orderInfo.boatId, pin: orderInfo.pin, email: orderInfo.email, deliveryDock: orderInfo.deliveryDock, deliveryDate: orderInfo.deliveryDate, notes: orderInfo.notes, items });
+        .submitWebAppOrder({ boatId: orderInfo.boatId, pin: orderInfo.pin, email: orderInfo.email, phone: orderInfo.phone, deliveryLocation: orderInfo.deliveryLocation, notes: orderInfo.notes, items });
     }
 
     // ===== UX helpers =====
