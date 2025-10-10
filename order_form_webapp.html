@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Dupuys DockSide Delivery</title>
+  <meta name="color-scheme" content="dark light">
+  <style>
+    :root {
+      --bg: #0b0b0b;
+      --card: rgba(20, 20, 20, 0.6);
+      --text: #f1f1f1;
+      --muted: #9ca3af;
+      --accent: #00bcd4;
+      --ok:#22c55e;
+      --danger:#ef4444;
+      --border: rgba(255, 255, 255, 0.08);
+      --radius: 14px;
+      --blur: 20px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.45);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, #000, #111 40%, #0b0b0b);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    header.hero {
+      text-align: center;
+      padding: 28px 16px 12px;
+      position: sticky; top: 0; z-index: 10;
+      backdrop-filter: blur(var(--blur)) saturate(140%);
+      background: rgba(10,10,10,.65);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title {
+      font-size: clamp(28px, 5.2vw, 44px);
+      font-weight: 900;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, var(--accent), #80deea);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0;
+    }
+    .subtitle { font-size: 14px; color: var(--muted); margin-top: 6px; }
+
+    main.container { max-width: 1040px; width: min(92%,1040px); margin: 0 auto; padding: clamp(12px, 3vw, 20px); }
+
+    .glass-card {
+      background: var(--card);
+      backdrop-filter: blur(var(--blur));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: clamp(14px,2vw,22px);
+      width: 100%;
+      margin: 14px 0;
+    }
+
+    label { font-size: 13px; font-weight: 600; color: var(--muted); }
+    input, select, textarea {
+      width: 100%; margin-top: 6px; padding: 10px 12px;
+      border-radius: var(--radius); border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05); color: var(--text); font-size: 14px; transition: all .2s ease;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); background: rgba(255,255,255,0.08); }
+
+    .btn {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 18px; color: var(--text);
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(var(--blur)); font-weight: 800; cursor: pointer; transition: all .2s ease;
+    }
+    .btn:hover { background: rgba(255,255,255,0.18); }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    .progress { display:flex; gap:8px; align-items:center; justify-content:center; font-weight:800; color:var(--muted); font-size:14px; }
+    .progress .active { color:#d1d5db; }
+
+    /* Toolbar */
+    .toolbar { position: sticky; top: calc(68px + 8px); z-index: 9; }
+    .searchbar { display:grid; grid-template-columns: 1fr auto; gap:8px; align-items:center; }
+    .searchbox { position:relative; }
+    .searchbox input { width:100%; padding: 12px 44px; border:1px solid var(--border); border-radius: var(--radius); background: rgba(255,255,255,.05); color:var(--text); font-size:16px; }
+    .icon { position:absolute; left:12px; top:50%; transform: translateY(-50%); opacity:.7; }
+    .chips { display:flex; gap:8px; overflow:auto; padding:8px 2px 4px; scrollbar-width:thin; -webkit-overflow-scrolling:touch; }
+    .chip { border:1px solid var(--border); background: rgba(255,255,255,.06); color: var(--text); padding:8px 12px; border-radius:999px; font-weight:800; white-space:nowrap; cursor:pointer; }
+    .chip[aria-selected="true"] { background: rgba(0,188,212,.18); border-color: rgba(0,188,212,.45); }
+
+    /* Items */
+    .section-title { display:flex; justify-content:space-between; align-items:center; font-weight:900; color:#e5e7eb; background: linear-gradient(90deg, rgba(0,188,212,.18), rgba(0,188,212,.05)); padding:10px 12px; border-radius: 10px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 12px; margin-top: 10px; }
+    .card-item { border:1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.04); padding: 12px; display:grid; gap:10px; transition: transform .12s ease, background .12s ease; }
+    .card-item:hover { background: rgba(255,255,255,.08); transform: translateY(-1px); }
+    .item-name { font-weight: 800; font-size: 14px; }
+    .item-meta { display:flex; justify-content:space-between; color: var(--muted); font-size: 13px; }
+    .price { color: var(--ok); font-weight: 900; }
+
+    .qty { display:grid; grid-template-columns: auto 80px auto; gap:8px; align-items:center; }
+    .btn-qty { width: 42px; height: 42px; border-radius: 12px; border: 1px solid rgba(0,188,212,.35); background: rgba(0,188,212,.08); color: var(--accent); font-weight: 900; font-size: 20px; display:grid; place-items:center; cursor: pointer; }
+    .qty-input { width: 100%; text-align: center; border: 1px solid var(--border); border-radius: 12px; padding: 10px; font-weight: 800; background: rgba(255,255,255,.05); color: var(--text); }
+    .in-cart { outline: 2px solid rgba(0,188,212,.25); background: rgba(0,188,212,.05); }
+
+    /* Dock */
+    .dock { position: fixed; left:50%; transform: translateX(-50%); width: min(92%, 1040px); bottom: calc(16px + var(--safe-bottom)); backdrop-filter: blur(var(--blur)); background: rgba(25,25,25,0.75); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow); z-index: 12; }
+    .badge { display:grid; place-items:center; width:34px; height:34px; border-radius:999px; background: rgba(255,255,255,.9); color:#0b0b0b; font-weight:900; }
+
+    /* Modal */
+    .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(10px); display: none; align-items: center; justify-content: center; z-index: 100; }
+    .modal[open] { display: flex; }
+    .sheet { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); width: min(92%, 680px); max-height: 92vh; overflow:auto; box-shadow: var(--shadow); padding: 16px; display:grid; grid-template-rows: auto 1fr auto; }
+    .sheet-head { display:flex; align-items:center; justify-content:space-between; padding: 6px 6px 12px; border-bottom: 1px solid var(--border); }
+    .close { border:1px solid var(--border); background: rgba(255,255,255,.08); color:var(--text); border-radius: 10px; width:40px; height:40px; display:grid; place-items:center; font-size: 20px; }
+    .review-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:8px; font-size:14px; color: var(--muted); }
+    .review-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed var(--border); }
+    .total { display:flex; justify-content:space-between; font-weight:900; font-size:16px; margin-top:8px; }
+
+    /* Tablet adjustments */
+    @media(max-width: 768px) {
+      .title { font-size: clamp(24px, 6vw, 36px); }
+      .section-title { font-size: 14px; }
+      .dock { padding: 12px 16px; font-size: 14px; }
+      .sheet { width: min(96%, 680px); max-height: 95vh; }
+    }
+
+    /* Mobile optimizations */
+    @media(max-width: 640px) {
+      header.hero { padding: 20px 16px 10px; }
+      .title { font-size: clamp(22px, 7vw, 32px); letter-spacing: 0.5px; }
+      .subtitle { font-size: 13px; }
+      
+      main.container { width: 96%; padding: 12px; }
+      .glass-card { padding: 16px; margin: 12px 0; }
+      
+      /* Form inputs stack on mobile */
+      .glass-card > div[style*="grid-template-columns"] { 
+        display: flex !important; 
+        flex-direction: column !important; 
+        gap: 14px !important;
+      }
+      
+      /* Better grid for mobile */
+      .grid { grid-template-columns: 1fr; gap: 10px; }
+      
+      /* Larger touch targets */
+      .btn { padding: 14px 20px; font-size: 15px; }
+      .btn-qty { width: 48px; height: 48px; font-size: 22px; }
+      .qty { grid-template-columns: auto 100px auto; gap: 10px; }
+      .qty-input { font-size: 16px; padding: 12px; }
+      
+      /* Stack dock bar on mobile */
+      .dock { 
+        flex-direction: column; 
+        gap: 12px; 
+        padding: 16px; 
+        width: 96%;
+        bottom: calc(12px + var(--safe-bottom));
+      }
+      .dock > div { width: 100%; }
+      .dock button { width: 100%; }
+      
+      /* Chips scroll better */
+      .chips { gap: 6px; padding: 10px 4px; }
+      .chip { padding: 10px 16px; font-size: 14px; }
+      
+      /* Modal fills more screen on mobile */
+      .sheet { 
+        width: 98%; 
+        max-height: 96vh; 
+        padding: 12px;
+        margin: 8px;
+      }
+      .sheet-head { padding: 8px 8px 12px; }
+      .review-grid { grid-template-columns: 1fr; gap: 6px; }
+      
+      /* Search adjustments */
+      .searchbox input { padding: 14px 48px; font-size: 16px; }
+      .toolbar { top: calc(62px + 8px); }
+      
+      /* Card improvements */
+      .card-item { padding: 14px; }
+      .item-name { font-size: 15px; }
+    }
+
+    /* Small phones */
+    @media(max-width: 375px) {
+      .title { font-size: 20px; }
+      main.container { width: 98%; padding: 8px; }
+      .glass-card { padding: 12px; }
+      .btn-qty { width: 44px; height: 44px; }
+      .qty { grid-template-columns: auto 90px auto; gap: 8px; }
+    }
+
+    /* Large screens */
+    @media(min-width: 1200px) {
+      main.container { max-width: 1200px; }
+      .grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+    }
+
+    /* Landscape mobile */
+    @media(max-height: 600px) and (orientation: landscape) {
+      header.hero { padding: 12px 16px 8px; }
+      .title { font-size: 24px; }
+      .subtitle { display: none; }
+      .glass-card { margin: 10px 0; padding: 12px; }
+      .toolbar { position: relative; top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <h1 class="title">Dupuys DockSide Delivery</h1>
+    <p class="subtitle">Seamless provisioning for your boat</p>
+  </header>
+
+  <main class="container">
+    <!-- Progress / Steps -->
+    <nav class="glass-card progress" aria-label="Progress">
+      <span id="crumbInfo" class="active">1. Boat Info</span>
+      <span>›</span>
+      <span id="crumbShop">2. Select Groceries</span>
+      <span>›</span>
+      <span id="crumbReview">3. Review & Submit</span>
+      <button class="btn" id="editInfoBtn" type="button" style="margin-left:auto" hidden>Edit Info</button>
+    </nav>
+
+    <!-- Screen: Info (Step 1) -->
+    <section id="screenInfo" class="glass-card" aria-labelledby="infoHeading">
+      <h2 id="infoHeading" style="margin:0 0 8px 0">Boat Information</h2>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px),1fr)); gap: 12px;">
+        <div>
+          <label for="boatSelect">Boat <span style="color:var(--danger)">*</span></label>
+          <select id="boatSelect" required></select>
+        </div>
+        <div>
+          <label for="pin">PIN <span style="color:var(--danger)">*</span></label>
+          <input id="pin" type="password" inputmode="numeric" pattern="[0-9]{4,6}" placeholder="4–6 digits" required />
+        </div>
+        <div>
+          <label for="email">Email <span style="color:var(--danger)">*</span></label>
+          <input id="email" type="email" placeholder="captain@dockside.com" required />
+        </div>
+        <div>
+          <label for="deliveryDock">Delivery Dock <span style="color:var(--danger)">*</span></label>
+          <input id="deliveryDock" placeholder="e.g., Dock 3" required />
+        </div>
+        <div>
+          <label for="deliveryDate">Delivery Date <span style="color:var(--danger)">*</span></label>
+          <input id="deliveryDate" type="date" required />
+        </div>
+        <div style="grid-column:1/-1">
+          <label for="notes">Special Instructions</label>
+          <textarea id="notes" rows="2" placeholder="Ice down drinks, leave with deckhand, etc."></textarea>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+        <button class="btn" id="continueBtn" type="button" disabled>Continue →</button>
+      </div>
+    </section>
+
+    <!-- Screen: Shop (Step 2) -->
+    <section id="screenShop" hidden>
+      <!-- Toolbar -->
+      <section class="glass-card toolbar" aria-labelledby="searchHeading">
+        <h2 id="searchHeading" style="position:absolute;left:-9999px">Search & Filter</h2>
+        <div class="searchbar">
+          <div class="searchbox">
+            <span class="icon" aria-hidden="true">🔎</span>
+            <input id="searchBox" type="search" placeholder="Search items… (press /)" aria-label="Search items" />
+          </div>
+          <button class="btn" id="clearSearch" type="button">Clear</button>
+        </div>
+        <nav class="chips" id="categoryTabs" aria-label="Categories"></nav>
+      </section>
+
+      <!-- Items -->
+      <div id="catalog"></div>
+      <div id="emptyState" class="glass-card" hidden>
+        <p style="margin:0;color:var(--muted)">No items match your search.</p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Dock Bar -->
+  <div class="dock" id="dockBar" hidden>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div class="badge" id="cartBadge">0</div>
+      <strong id="cartSummary">No items selected</strong>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="reviewBtn" type="button">Review Order</button>
+    </div>
+  </div>
+
+  <!-- Review Modal -->
+  <div class="modal" id="reviewModal" role="dialog" aria-modal="true" aria-labelledby="reviewTitle" hidden>
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="reviewTitle" style="margin:0">Review Your Order</h2>
+        <button class="close" id="closeModal" aria-label="Close">×</button>
+      </div>
+      <div class="glass-card" style="margin:12px 0;">
+        <div class="review-grid">
+          <div><strong>Boat:</strong> <span id="revBoat">—</span></div>
+          <div><strong>Dock:</strong> <span id="revDock">—</span></div>
+          <div><strong>Date:</strong> <span id="revDate">—</span></div>
+          <div><strong>Email:</strong> <span id="revEmail">—</span></div>
+          <div style="grid-column:1/-1"><strong>Notes:</strong> <span id="revNotes">—</span></div>
+        </div>
+      </div>
+      <div class="glass-card" style="margin:0 0 12px 0">
+        <div id="reviewList"></div>
+        <div class="total"><span>Estimated subtotal</span><span id="subtotal">$0.00</span></div>
+      </div>
+      <button class="btn" id="submitBtn" type="button">Submit Order</button>
+    </div>
+  </div>
+
+  <script>
+    // ===== State =====
+    let allItems = [];
+    let itemsByCategory = Object.create(null);
+    const cart = Object.create(null);
+    let currentCat = 'all';
+    const orderInfo = { boatId:'', pin:'', email:'', deliveryDock:'', deliveryDate:'', notes:'' };
+
+    // ===== DOM =====
+    const $ = (s, r=document)=>r.querySelector(s);
+    const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+
+    const screenInfo = $('#screenInfo');
+    const screenShop = $('#screenShop');
+    const continueBtn = $('#continueBtn');
+    const editInfoBtn = $('#editInfoBtn');
+    const dockBar = $('#dockBar');
+
+    const tabs = $('#categoryTabs');
+    const catalog = $('#catalog');
+    const searchBox = $('#searchBox');
+    const badge = $('#cartBadge');
+    const summary = $('#cartSummary');
+
+    const modal = $('#reviewModal');
+    const reviewList = $('#reviewList');
+    const subtotal = $('#subtotal');
+
+    // Breadcrumb labels
+    const crumbInfo = $('#crumbInfo');
+    const crumbShop = $('#crumbShop');
+    const crumbReview = $('#crumbReview');
+
+    // ===== Apps Script Data Loads =====
+    google.script.run.withSuccessHandler(populateBoats).getBoatsForWebApp();
+    google.script.run.withSuccessHandler(initCatalog).getItemsForWebApp();
+
+    function populateBoats(list){
+      const select = $('#boatSelect');
+      const frag = document.createDocumentFragment();
+      const ph = document.createElement('option'); ph.value=''; ph.textContent='Select your boat…'; frag.appendChild(ph);
+      (list||[]).forEach(b=>{ const o=document.createElement('option'); o.value=b.id; o.textContent=`${b.id} — ${b.name}`; frag.appendChild(o); });
+      select.replaceChildren(frag);
+    }
+
+    function initCatalog(items){
+      allItems = Array.isArray(items)? items : [];
+      itemsByCategory = Object.create(null);
+      for(const it of allItems){ const c= it.category || 'Other'; (itemsByCategory[c] ||= []).push(it); }
+      for(const c in itemsByCategory){ itemsByCategory[c].sort((a,b)=> a.name.localeCompare(b.name)); }
+      // gate: wait for info before showing shop
+      const dateInput = $('#deliveryDate');
+      if (dateInput) dateInput.min = new Date().toISOString().split('T')[0];
+      updateContinueState();
+    }
+
+    // ===== Info gating =====
+    ;['boatSelect','pin','email','deliveryDock','deliveryDate','notes'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('input', updateContinueState);
+      el.addEventListener('change', updateContinueState);
+    });
+
+    function updateContinueState(){
+      orderInfo.boatId = $('#boatSelect').value.trim();
+      orderInfo.pin = $('#pin').value.trim();
+      orderInfo.email = $('#email').value.trim();
+      orderInfo.deliveryDock = $('#deliveryDock').value.trim();
+      orderInfo.deliveryDate = $('#deliveryDate').value;
+      orderInfo.notes = $('#notes').value.trim();
+      const ok = !!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate);
+      continueBtn.disabled = !ok;
+    }
+
+    continueBtn.addEventListener('click', ()=>{
+      if(continueBtn.disabled) return;
+      screenInfo.hidden = true; screenShop.hidden = false; dockBar.hidden = false;
+      renderTabs(); renderCategory('all');
+      crumbInfo.classList.add('active'); crumbShop.classList.add('active');
+      editInfoBtn.hidden = false;
+      toast('Boat info saved', true);
+    });
+
+    editInfoBtn.addEventListener('click', ()=>{
+      screenShop.hidden = true; dockBar.hidden = true; screenInfo.hidden = false;
+      crumbShop.classList.remove('active'); crumbReview.classList.remove('active');
+    });
+
+    // ===== Tabs =====
+    function renderTabs(){
+      tabs.innerHTML='';
+      const cats = Object.keys(itemsByCategory).sort();
+      const make = (label,key,selected=false)=>{ const b=document.createElement('button'); b.className='chip'; b.type='button'; b.dataset.key=key; b.setAttribute('aria-selected', selected); b.textContent=label; b.addEventListener('click',()=>selectTab(key)); return b; };
+      tabs.appendChild(make('All', 'all', true));
+      for(const c of cats){ const cnt = itemsByCategory[c]?.length||0; tabs.appendChild(make(`${c} (${cnt})`, c)); }
+    }
+    function selectTab(key){ $$('.chip',tabs).forEach(el=>el.setAttribute('aria-selected','false')); const me=[...tabs.children].find(x=>x.dataset.key===key); if(me) me.setAttribute('aria-selected','true'); renderCategory(key); }
+
+    // ===== Render (chunked) =====
+    function renderCategory(cat){
+      currentCat = cat; catalog.innerHTML='';
+      const cats = cat==='all'? Object.keys(itemsByCategory).sort() : [cat];
+      if(!cats.length){ empty(true); return; }
+
+      const queue = [];
+      for(const c of cats){ const items = itemsByCategory[c] || []; if(!items.length) continue; queue.push([c, items]); }
+      if(!queue.length){ empty(true); return; }
+
+      const CHUNK = 36; // items per pump
+      function pump(){
+        if(!queue.length){ searchFilter(); return; }
+        const [c, list] = queue.shift();
+        const section = document.createElement('section');
+        const title = document.createElement('div'); title.className='section-title'; title.innerHTML=`<span>${c}</span><span>${list.length} items</span>`;
+        const grid = document.createElement('div'); grid.className='grid'; section.append(title,grid); catalog.appendChild(section);
+        let i=0; (function draw(){
+          let n=0; while(i<list.length && n<CHUNK){ grid.appendChild(itemCard(list[i++])); n++; }
+          if(i<list.length){ setTimeout(draw,0); } else { setTimeout(pump,0); }
+        })();
+      }
+      pump();
+    }
+
+    function itemCard(item){
+      const card = document.createElement('article'); card.className='card-item'; card.dataset.code=item.code; card.dataset.name=(item.name||'').toLowerCase();
+      const inCart = cart[item.code]||0; if(inCart>0) card.classList.add('in-cart');
+      card.innerHTML = `
+        <div class="item-name">${escapeHtml(item.name)}</div>
+        <div class="item-meta"><span>${escapeHtml(item.unit)}</span><span class="price">$${Number(item.price).toFixed(2)}/${escapeHtml(item.unit)}</span></div>
+        <div class="qty">
+          <button class="btn-qty" data-act="dec" aria-label="Decrease">−</button>
+          <input class="qty-input" id="qty-${cssEscape(item.code)}" type="number" inputmode="decimal" min="0" step="0.1" value="${inCart||0}">
+          <button class="btn-qty" data-act="inc" aria-label="Increase">+</button>
+        </div>`;
+      const input = card.querySelector('input');
+      card.querySelector('[data-act="dec"]').addEventListener('click',()=>changeQty(item.code,-1));
+      card.querySelector('[data-act="inc"]').addEventListener('click',()=>changeQty(item.code, +1));
+      input.addEventListener('change',()=>updateCart(item.code,input.value,item));
+      return card;
+    }
+
+    function changeQty(code,delta){
+      const el = document.getElementById(`qty-${cssEscape(code)}`);
+      const cur = parseFloat(el?.value)||0; const next = Math.max(0,cur+delta);
+      if(el) el.value = next.toFixed(1);
+      const item = allItems.find(i=>i.code===code);
+      updateCart(code,next,item);
+    }
+
+    function updateCart(code,qty,item){
+      qty = parseFloat(qty)||0;
+      if(qty>0) cart[code]=qty; else delete cart[code];
+      const card = document.querySelector(`[data-code="${cssEscape(code)}"]`);
+      if(card) card.classList.toggle('in-cart', qty>0);
+      refreshDock();
+    }
+
+    function refreshDock(){
+      const entries = Object.entries(cart);
+      badge.textContent = String(entries.length);
+      const total = entries.reduce((s,[code,q])=>{ const it = allItems.find(i=>i.code===code); return s + (it? it.price*q : 0); },0);
+      summary.textContent = entries.length? `${entries.length} item${entries.length>1?'s':''} • Est. $${total.toFixed(2)}` : 'No items selected';
+    }
+
+    // ===== Search =====
+    function searchFilter(){
+      const q = (searchBox.value||'').toLowerCase().trim();
+      let vis = 0; $$('.card-item').forEach(card=>{ const ok = !q || card.dataset.name.includes(q); card.hidden = !ok; if(ok) vis++; });
+      empty(vis===0);
+    }
+    function empty(state){ $('#emptyState').hidden = !state; }
+
+    let debounce; searchBox?.addEventListener('input',()=>{ clearTimeout(debounce); debounce=setTimeout(searchFilter,120); });
+    $('#clearSearch')?.addEventListener('click',()=>{ searchBox.value=''; searchFilter(); searchBox.focus(); });
+    document.addEventListener('keydown',e=>{ if(e.key==='/'){ e.preventDefault(); searchBox?.focus(); }});
+
+    // ===== Review Modal =====
+    $('#reviewBtn').addEventListener('click', openModal);
+    $('#closeModal').addEventListener('click', closeModal);
+    modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
+    $('#submitBtn').addEventListener('click', submitOrder);
+
+    function openModal(){
+      if(!Object.keys(cart).length){ alert('Add items first'); return; }
+      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate)){
+        alert('Please complete boat info first'); return; }
+
+      reviewList.innerHTML='';
+      let total = 0;
+      for(const [code,qty] of Object.entries(cart)){
+        const it = allItems.find(i=>i.code===code); if(!it) continue; total += it.price*qty;
+        const row = document.createElement('div'); row.className='review-row';
+        row.innerHTML = `<span>${escapeHtml(it.name)}</span><span><strong>${qty}</strong> ${escapeHtml(it.unit)}</span>`;
+        reviewList.appendChild(row);
+      }
+      $('#revBoat').textContent = orderInfo.boatId;
+      $('#revDock').textContent = orderInfo.deliveryDock || '—';
+      $('#revDate').textContent = orderInfo.deliveryDate || '—';
+      $('#revEmail').textContent = orderInfo.email || '—';
+      $('#revNotes').textContent = orderInfo.notes || '—';
+
+      subtotal.textContent = `$${total.toFixed(2)}`;
+      modal.hidden=false; modal.setAttribute('open','');
+      setTimeout(()=>$('#closeModal').focus(),0);
+    }
+    function closeModal(){ modal.hidden=true; modal.removeAttribute('open'); }
+
+    function submitOrder(){
+      if(!(orderInfo.boatId && orderInfo.pin && orderInfo.email && orderInfo.deliveryDock && orderInfo.deliveryDate)){
+        toast('Please complete boat info', false); return; }
+      const items = Object.entries(cart).map(([code,qty])=>({code,qty}));
+      const btn=$('#submitBtn'); btn.disabled=true; btn.textContent='Submitting…';
+      google.script.run
+        .withSuccessHandler(res=>{ if(res&&res.success){ toast('Order submitted! #'+res.docNumber,true); setTimeout(()=>window.location.reload(),1000);} else { toast('Error: '+(res?.error||'Unknown')); btn.disabled=false; btn.textContent='Submit Order'; } })
+        .withFailureHandler(err=>{ toast('Error: '+err); btn.disabled=false; btn.textContent='Submit Order'; })
+        .submitWebAppOrder({ boatId: orderInfo.boatId, pin: orderInfo.pin, email: orderInfo.email, deliveryDock: orderInfo.deliveryDock, deliveryDate: orderInfo.deliveryDate, notes: orderInfo.notes, items });
+    }
+
+    // ===== UX helpers =====
+    function toast(msg,ok){
+      const n=document.createElement('div'); n.textContent=msg; n.style.position='fixed'; n.style.left='50%'; n.style.transform='translateX(-50%)'; n.style.bottom='calc(20px + var(--safe-bottom))'; n.style.background= ok? 'linear-gradient(90deg,#10b981,#22c55e)' : 'linear-gradient(90deg,#ef4444,#f97316)'; n.style.color='#fff'; n.style.padding='10px 14px'; n.style.borderRadius='12px'; n.style.boxShadow='var(--shadow)'; n.style.zIndex='1000'; document.body.appendChild(n); setTimeout(()=>n.remove(),1800);
+    }
+    function cssEscape(s){ return CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g,'_'); }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+  </script>
+</body>
+</html>
