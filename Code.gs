@@ -2155,6 +2155,17 @@ function getBoatsForWebApp() {
   });
 }
 
+function verifyPinForWebApp(boatId, pin) {
+  try {
+    if (!boatId || !pin) return { success: false, error: 'Missing boat ID or PIN' };
+    const isValid = DataLayer.verifyPin(boatId, pin);
+    if (!isValid) return { success: false, error: 'Invalid PIN for this boat' };
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: 'Verification error: ' + e.message };
+  }
+}
+
 function submitWebAppOrder(orderData) {
   try {
     if (!orderData || !orderData.boatId || !orderData.pin) return { success: false, error: 'Missing data' };
