@@ -727,6 +727,7 @@
           <div class="dot"></div>
           <div class="dot"></div>
           <div class="dot"></div>
+          <div class="dot"></div>
         </div>
 
         <!-- Step 1: Boat -->
@@ -784,13 +785,13 @@
           </div>
         </div>
 
-        <!-- Step 5: Location -->
+        <!-- Step 5: PO -->
         <div class="step" data-step="5">
-          <h2 class="step-title">Delivery Location</h2>
-          <p class="step-desc">Where should we deliver?</p>
+          <h2 class="step-title">Purchase Order</h2>
+          <p class="step-desc">Optional - for your records</p>
           <div class="field">
-            <label for="location">Delivery Location</label>
-            <input type="text" id="location" placeholder="e.g., Dock 3, Marina A">
+            <label for="po">PO Number</label>
+            <input type="text" id="po" placeholder="e.g., PO-12345">
           </div>
           <div class="btn-group">
             <button class="btn btn-secondary" id="back5">← Back</button>
@@ -798,8 +799,22 @@
           </div>
         </div>
 
-        <!-- Step 6: Notes -->
+        <!-- Step 6: Location -->
         <div class="step" data-step="6">
+          <h2 class="step-title">Delivery Location</h2>
+          <p class="step-desc">Where should we deliver?</p>
+          <div class="field">
+            <label for="location">Delivery Location</label>
+            <input type="text" id="location" placeholder="e.g., Dock 3, Marina A">
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-secondary" id="back6">← Back</button>
+            <button class="btn btn-primary" id="next6">Next →</button>
+          </div>
+        </div>
+
+        <!-- Step 7: Notes -->
+        <div class="step" data-step="7">
           <h2 class="step-title">Special Instructions</h2>
           <p class="step-desc">Any special requests?</p>
           <div class="field">
@@ -807,7 +822,7 @@
             <textarea id="notes" placeholder="Ice down drinks, leave with deckhand, etc."></textarea>
           </div>
           <div class="btn-group">
-            <button class="btn btn-secondary" id="back6">← Back</button>
+            <button class="btn btn-secondary" id="back7">← Back</button>
             <button class="btn btn-primary" id="startShopping">Start Shopping →</button>
           </div>
         </div>
@@ -875,7 +890,7 @@
     let categories = {};
     const cart = {};
     let currentStep = 1;
-    const info = {boat:'', pin:'', email:'', phone:'', location:'', notes:''};
+    const info = {boat:'', pin:'', email:'', phone:'', po:'', location:'', notes:''};
 
     // Helpers
     const $ = id => document.getElementById(id);
@@ -976,12 +991,19 @@
     // Step 5
     $('back5').addEventListener('click', () => showStep(4));
     $('next5').addEventListener('click', () => {
-      info.location = $('location').value;
+      info.po = $('po').value;
       showStep(6);
     });
 
     // Step 6
     $('back6').addEventListener('click', () => showStep(5));
+    $('next6').addEventListener('click', () => {
+      info.location = $('location').value;
+      showStep(7);
+    });
+
+    // Step 7
+    $('back7').addEventListener('click', () => showStep(6));
     $('startShopping').addEventListener('click', startShopping);
 
     function startShopping() {
@@ -1168,6 +1190,7 @@
         <div class="info-item"><strong>Boat:</strong><span>${esc(info.boat)}</span></div>
         <div class="info-item"><strong>Email:</strong><span>${esc(info.email)||'—'}</span></div>
         <div class="info-item"><strong>Phone:</strong><span>${esc(info.phone)||'—'}</span></div>
+        <div class="info-item"><strong>PO Number:</strong><span>${esc(info.po)||'—'}</span></div>
         <div class="info-item"><strong>Location:</strong><span>${esc(info.location)||'—'}</span></div>
         ${info.notes?`<div class="info-item" style="grid-column:1/-1"><strong>Notes:</strong><span>${esc(info.notes)}</span></div>`:''}
       `;
@@ -1242,6 +1265,7 @@
           pin: info.pin,
           email: info.email,
           phone: info.phone,
+          po: info.po,
           deliveryLocation: info.location,
           notes: info.notes,
           items: orderItems

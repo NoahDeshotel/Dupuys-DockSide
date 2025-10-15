@@ -10,10 +10,19 @@
 
 // ===== SIMPLE LICENSE CHECK (Subterra) =====
 // Set these two values per client deployment:
-const LICENSE_URL = 'https://script.google.com/macros/s/YOUR_WEB_APP_URL/exec'; // <-- replace with your real URL
-const TENANT_ID   = 'client-xyz'; // <-- change per client
+const LICENSE_URL = 'https://script.google.com/macros/s/AKfycbzSxT8TGGOELrF5sfMgsbCZXGCmo47kjewY7Yg5tF_9TbX_LeK32G7HD93t3rIrGCDW/exec';
+const TENANT_ID   = ''; // <-- change per client
 const FAIL_OPEN   = false; // fail-closed to avoid simple trigger bypass
 const LICENSE_CACHE_MS = 15 * 60 * 1000; // cache license result for 15 minutes
+
+function _getLicenseCacheRecord_() {
+  const props = PropertiesService.getScriptProperties();
+  const k = 'LIC:' + TENANT_ID;
+  const cached = props.getProperty(k);
+  if (!cached) return null;
+  const parts = cached.split('|');
+  return { status: parts[0], ts: Number(parts[1] || 0), key: k, raw: cached };
+}
 
 // Contact + suspension messaging (shown when account is locked)
 const SUPPORT_CONTACT = 'support@subterra.one';
@@ -23,36 +32,27 @@ const LOCK_MESSAGE =
 
 function isLicensed() {
   const props = PropertiesService.getScriptProperties();
-  const k = 'LIC:' + TENANT_ID;
+  const rec = _getLicenseCacheRecord_(); // {status, ts, key}
 
-  // 1) Use fresh cached value if available (avoids UrlFetch inside simple triggers)
-  const cached = props.getProperty(k);
-  if (cached) {
-    const parts = cached.split('|');
-    const status = parts[0];
-    const ts = Number(parts[1] || 0);
-    if (Date.now() - ts < LICENSE_CACHE_MS) {
-      return status === 'ok';
-    }
+  // If we have a recent "ok", honor cache to avoid excess UrlFetch in simple triggers
+  if (rec && rec.status === 'ok' && (Date.now() - rec.ts) < LICENSE_CACHE_MS) {
+    return true;
   }
-
-  // 2) Refresh from server (this may fail in simple triggers; we handle that below)
+  // If cached "locked" or no cache -> try to fetch live (allowed in menu/installable contexts)
   try {
     const res = UrlFetchApp.fetch(LICENSE_URL + '?tenant=' + encodeURIComponent(TENANT_ID), {
       muteHttpExceptions: true,
       followRedirects: true,
       timeout: 2000
     });
-    const ok = res.getResponseCode() === 200 && (res.getContentText() || '').trim() === 'ok';
-    props.setProperty(k, (ok ? 'ok' : 'locked') + '|' + String(Date.now()));
+    const body = (res.getContentText() || '').trim().toLowerCase();
+    const ok = res.getResponseCode() === 200 && (/^ok\b/.test(body) || body === 'okay' || body === 'true' || body === '1');
+    props.setProperty('LIC:' + TENANT_ID, (ok ? 'ok' : 'locked') + '|' + String(Date.now()));
     return ok;
   } catch (e) {
-    // 3) On fetch error (e.g., simple trigger auth), fall back to cached status if present; otherwise fail-closed
-    if (cached) {
-      const status = cached.split('|')[0];
-      return status === 'ok';
-    }
-    return !!FAIL_OPEN; // with FAIL_OPEN=false this will lock on first-run in simple-trigger contexts
+    // If we cannot fetch, fall back: if we had any cached status, use it; otherwise fail-closed
+    if (rec) return rec.status === 'ok';
+    return !!FAIL_OPEN;
   }
 }
 
@@ -68,10 +68,59 @@ function isLicensedCachedOnly() {
   return status === 'ok';
 }
 
+function forceLicenseRefresh() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.deleteProperty('LIC:' + TENANT_ID); // clear cache
+  } catch (e) {}
+  const ok = isLicensed(); // live fetch + recache
+  SpreadsheetApp.getUi().alert(ok ? '✅ License active. Features unlocked.' : LOCK_MESSAGE);
+  // Rebuild menu immediately based on fresh cache
+  try { onOpen(); } catch (err) {}
+}
+
+function showLicenseDebug() {
+  const rec = _getLicenseCacheRecord_();
+  const cacheLine = rec ? (rec.status + ' @ ' + new Date(rec.ts).toLocaleString()) : 'none';
+  let live;
+  try {
+    const res = UrlFetchApp.fetch(LICENSE_URL + '?tenant=' + encodeURIComponent(TENANT_ID) + '&_=' + Date.now(), {
+      muteHttpExceptions: true, followRedirects: true, timeout: 3000
+    });
+    const body = (res.getContentText() || '').trim();
+    live = 'HTTP ' + res.getResponseCode() + ' — ' + body;
+  } catch (e) {
+    live = 'Fetch error: ' + e;
+  }
+  SpreadsheetApp.getUi().alert(
+    '🔍 License Debug',
+    'Cache: ' + cacheLine + '\n' +
+    'Tenant: ' + TENANT_ID + '\n' +
+    'URL: ' + LICENSE_URL + '\n' +
+    'Live: ' + live,
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
 function requireLicense(msg) {
+  // First check (may refresh if cache was "locked")
   if (isLicensed()) return true;
+  // Second chance: clear cache and try once more (useful right after you flip from locked->ok)
+  try {
+    const props = PropertiesService.getScriptProperties();
+    props.deleteProperty('LIC:' + TENANT_ID);
+  } catch (e) {}
+  if (isLicensed()) return true;
+
   SpreadsheetApp.getUi().alert(msg || LOCK_MESSAGE);
   throw new Error('Service locked');
+}
+
+function retryLicenseCheck() {
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty('LIC:' + TENANT_ID);
+  const ok = isLicensed();
+  SpreadsheetApp.getUi().alert(ok ? '✅ License active. Features unlocked.' : LOCK_MESSAGE);
 }
 
 function showLocked() {
@@ -145,7 +194,7 @@ function onOpen() {
       .createMenu('⚓ Dupuys')
       .addItem('🔒 Service Locked', 'showLocked')
       .addToUi();
-    showLocked(); // immediate clarity
+    showLocked();
     return;
   }
   // lic is true or unknown -> build menus; actions are still gated by requireLicense()
@@ -159,15 +208,16 @@ function onOpen() {
 /******** CLIENT MENU - Simplified for Daily Use ********/
 function buildClientMenu() {
   const ui = SpreadsheetApp.getUi();
-  
   ui.createMenu('⚓ Dupuys')
+    .addItem('🔧 Itilize (Setup)', 'itilize')
+    .addSeparator()
     .addItem('📋 Order Master', 'openOrderMaster')
     .addSeparator()
-    .addSubMenu(ui.createMenu('💰 QuickBooks Export')
+    .addSubMenu(ui.createMenu('💰 QuickBooks')
       .addItem('📄 Export Current Order', 'exportCurrentOrderSheet')
       .addItem('📄 Export Ready Batch', 'exportReadyBatch')
       .addSeparator()
-      .addItem('📦 Export Items (Optional)', 'exportPriceBookToQuickBooks'))
+      .addItem('📦 Export Inventory (Items)', 'exportPriceBookToQuickBooks'))
     .addSubMenu(ui.createMenu('📦 Archive Orders')
       .addItem('Archive Current Order', 'archiveCurrentOrder')
       .addItem('Archive All Exported Orders', 'archiveExported'))
@@ -179,10 +229,71 @@ function buildClientMenu() {
       .addItem('Add New Item', 'addItemManually'))
     .addSeparator()
     .addItem('🔄 Refresh Data', 'refreshAllDashboards')
-    .addItem('🔗 Get Web App URL', 'getWebAppUrl')
-    .addSeparator()
     .addItem('ℹ️ Help & Instructions', 'showClientHelp')
     .addToUi();
+}
+
+/**
+ * One-click setup for clients. Runs safely multiple times.
+ * - Triggers OAuth consent for UrlFetch (license), Drive (exports), Spreadsheet
+ * - Ensures required sheets, headers, validations, and triggers exist
+ * - Verifies license and warms cache
+ */
+function itiliseScopes_() {
+  // Touch UrlFetch (license)
+  try {
+    var pingUrl = LICENSE_URL + (LICENSE_URL.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+    var res = UrlFetchApp.fetch(pingUrl, { muteHttpExceptions: true, followRedirects: true, timeout: 5000 });
+  } catch (e) {
+    // Ignore; purpose is to trigger consent
+  }
+  // Touch Drive (ensures folder exists & drive scope granted)
+  try {
+    getDriveFolder();
+  } catch (e2) {}
+  // Touch Spreadsheet UI to ensure UI scope is granted
+  try {
+    SpreadsheetApp.getActive().getName();
+  } catch (e3) {}
+}
+
+function itilize() {
+  // 1) Ensure workbook structure & triggers
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const requiredSheets = [SHEET.ORDER_MASTER, SHEET.PRICEBOOK, SHEET.CUSTOMERS, SHEET.ORDER_DATA];
+    var missing = false;
+    for (var i = 0; i < requiredSheets.length; i++) {
+      if (!ss.getSheetByName(requiredSheets[i])) { missing = true; break; }
+    }
+    if (missing) {
+      initializeWorkbook(); // idempotent: creates sheets, headers, installs triggers
+    } else {
+      // Make sure data validation & triggers exist
+      applyListValidation(ss.getSheetByName(SHEET.ORDER_MASTER), 2, 6, STATUS_CHOICES);
+      installOnEditTrigger();
+    }
+  } catch (e) {
+    // Continue; any failures will be surfaced in UI below
+  }
+
+  // 2) Trigger OAuth consents and pre-create Drive folder
+  itiliseScopes_();
+
+  // 3) Verify license now and cache result
+  var licOk = false;
+  try {
+    licOk = isLicensed();
+  } catch (e) {}
+
+  // 4) Final UI confirmation
+  SpreadsheetApp.getUi().alert(
+    (licOk ? '✅ Setup complete and license verified.' : '⚠️ Setup complete. License not verified yet.' ) +
+    '\n\n• Sheets & triggers are installed.\n• Drive export folder ensured.\n• Permissions requested.\n' +
+    (licOk ? '' : 'If prompted, re-run “Itilize (Setup)” after granting permissions.')
+  );
+  // Rebuild menu in case locked state changed
+  try { onOpen(); } catch (e) {}
 }
 
 /******** ADMIN MENU - Full Access for Development ********/
@@ -479,7 +590,7 @@ function initializeWorkbook() {
   orderData.hideSheet();
   
   const MASTER_COLS = ['Order #', 'DocNumber', 'Date', 'BoatID', 'Boat Name', 'Status', 'Items', 'Total $', 'Assigned To', 'Sheet Link', 'Created', 'Last Updated'];
-  const DATA_COLS = ['DocNumber', 'BoatID', 'BoatName', 'Status', 'AssignedTo', 'TxnDate', 'DeliveryLocation', 'Phone', 'Item', 'Category', 'Qty', 'Unit', 'BaseCost', 'Markup%', 'Rate', 'Amount', 'TaxCode', 'Notes', 'ExportStatus', 'CreatedAt'];
+  const DATA_COLS = ['DocNumber', 'BoatID', 'BoatName', 'Status', 'AssignedTo', 'TxnDate', 'DeliveryLocation', 'Phone', 'PONumber', 'Item', 'Category', 'Qty', 'Unit', 'BaseCost', 'Markup%', 'Rate', 'Amount', 'TaxCode', 'Notes', 'ExportStatus', 'CreatedAt'];
   const PRICE_HEADERS = ['Item', 'Category', 'Unit', 'BasePrice', 'DefaultMarkup%', 'Notes'];
   const CUST_HEADERS = ['BoatID', 'BoatName', 'QB_CustomerName', 'BillingEmail', 'DefaultTerms', 'PIN'];
   const LOG_HEADERS = ['Timestamp', 'User', 'Action', 'Details', 'Status'];
@@ -697,19 +808,23 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   sheet.getRange('H4').setValue(orderInfo.phone || '');
   
   sheet.getRange('G5:H5').setBackground('#f8f9fa');
-  sheet.getRange('G5').setValue('QB Customer:').setFontWeight('bold');
-  sheet.getRange('H5').setValue(orderInfo.qbCustomerName);
+  sheet.getRange('G5').setValue('PO Number:').setFontWeight('bold');
+  sheet.getRange('H5').setValue(orderInfo.po || '');
   
   sheet.getRange('G6:H6').setBackground('#ffffff');
-  sheet.getRange('G6').setValue('Created:').setFontWeight('bold');
-  sheet.getRange('H6').setValue(now);
+  sheet.getRange('G6').setValue('QB Customer:').setFontWeight('bold');
+  sheet.getRange('H6').setValue(orderInfo.qbCustomerName);
+  
+  sheet.getRange('G7:H7').setBackground('#f8f9fa');
+  sheet.getRange('G7').setValue('Created:').setFontWeight('bold');
+  sheet.getRange('H7').setValue(now);
   
   // Border around info section
-  sheet.getRange('A3:H6').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('A3:H7').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // ========== ITEMS TABLE SECTION ==========
-  sheet.getRange('A7:H7').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
-  sheet.getRange('A7')
+  sheet.getRange('A8:H8').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
+  sheet.getRange('A8')
     .setFontSize(14)
     .setFontWeight('bold')
     .setBackground('#34a853')
@@ -718,7 +833,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setHorizontalAlignment('center');
   
   const itemHeaders = ['Item Code', 'Description', 'Category', 'Unit', 'Qty', 'Base Cost', 'Markup %', 'Total'];
-  sheet.getRange('A8:H8')
+  sheet.getRange('A9:H9')
     .setValues([itemHeaders])
     .setFontWeight('bold')
     .setBackground('#34a853')
@@ -727,10 +842,10 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setHorizontalAlignment('left');
   
   // Add header borders
-  sheet.getRange('A8:H8').setBorder(true, true, true, true, true, true, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  sheet.getRange('A9:H9').setBorder(true, true, true, true, true, true, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // Items data with alternating colors
-  let currentRow = 9;
+  let currentRow = 10;
   for (var i = 0; i < orderInfo.items.length; i++) {
     const item = orderInfo.items[i];
     const priceItem = DataLayer.getPriceBookItem(item.itemCode);
@@ -751,15 +866,15 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   }
   
   // Border around items table
-  sheet.getRange('A8:H' + (currentRow - 1)).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('A9:H' + (currentRow - 1)).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // Totals row with strong styling (using dynamic formulas that adapt to added rows)
   const totalsRow = currentRow + 1;
   sheet.getRange(totalsRow, 1, 1, 4).merge().setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
   // Use SUMIF to dynamically sum all non-empty rows BEFORE the totals row (avoiding circular reference)
-  const sumRange = 'A9:A' + (totalsRow - 1);
-  const qtyRange = 'E9:E' + (totalsRow - 1);
-  const amountRange = 'H9:H' + (totalsRow - 1);
+  const sumRange = 'A10:A' + (totalsRow - 1);
+  const qtyRange = 'E10:E' + (totalsRow - 1);
+  const amountRange = 'H10:H' + (totalsRow - 1);
   sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
   sheet.getRange(totalsRow, 6, 1, 2).merge().setBackground('#34a853');
   sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
@@ -842,11 +957,11 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   sheet.setColumnWidth(8, 110);  // Total
   
   // Currency formatting
-  sheet.getRange('F9:F' + (currentRow - 1)).setNumberFormat('$#,##0.00');
-  sheet.getRange('H9:H' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('F10:F' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('H10:H' + (currentRow - 1)).setNumberFormat('$#,##0.00');
   
   // Freeze header rows
-  sheet.setFrozenRows(8);
+  sheet.setFrozenRows(9);
   
   // CLEAN UP: Hide unused rows and columns beyond our content
   const maxRows = sheet.getMaxRows();
@@ -966,6 +1081,7 @@ function syncOrderToDataSheet(docNumber) {
   const deliveryLocation = orderSheet.getRange('E5').getValue();
   const txnDate = orderSheet.getRange('H3').getValue();
   const phone = orderSheet.getRange('H4').getValue();
+  const po = orderSheet.getRange('H5').getValue();
   const exportStatus = orderSheet.getRange(exportStatusRow, 2).getValue();
   
   const dataHeaders = dataSheet.getRange(1, 1, 1, dataSheet.getLastColumn()).getValues()[0];
@@ -982,7 +1098,7 @@ function syncOrderToDataSheet(docNumber) {
   let totalAmount = 0;
   let itemCount = 0; // Track items for THIS order only
   
-  for (var currentRow = 9; currentRow <= lastItemRow; currentRow++) {
+  for (var currentRow = 10; currentRow <= lastItemRow; currentRow++) {
     const itemCode = orderSheet.getRange(currentRow, 1).getValue();
     if (!itemCode) continue;
     
@@ -1005,6 +1121,7 @@ function syncOrderToDataSheet(docNumber) {
     row[idx['TxnDate']] = txnDate;
     row[idx['DeliveryLocation']] = deliveryLocation;
     row[idx['Phone']] = phone || '';
+    row[idx['PONumber']] = po || '';
     row[idx['Item']] = itemCode;
     row[idx['Category']] = category;
     row[idx['Qty']] = qty;
@@ -1068,6 +1185,7 @@ function onFormSubmit(e) {
     const pin = first(named['PIN']);
     const deliveryLocation = first(named['Delivery Location']) || first(named['Delivery Dock / Location']) || '';
     const phone = first(named['Phone Number']) || '';
+    const po = first(named['PO Number']) || '';
     const reqDate = first(named['Date']) || first(named['Requested Delivery Date']);
     const notes = first(named['Notes / Special Instructions']) || '';
     const additionalNotes = first(named['Additional Notes or Substitutions']) || '';
@@ -1119,6 +1237,7 @@ function onFormSubmit(e) {
       txnDate: txnDate,
       deliveryLocation: deliveryLocation,
       phone: phone,
+      po: po,
       notes: finalNotes,
       items: items
     };
@@ -1190,9 +1309,9 @@ function fixCircularReferenceInOrderSheets() {
       const totalsRow = positions.totalsRow;
       
       // Fix the formulas to exclude the totals row itself
-      const sumRange = 'A9:A' + (totalsRow - 1);
-      const qtyRange = 'E9:E' + (totalsRow - 1);
-      const amountRange = 'H9:H' + (totalsRow - 1);
+      const sumRange = 'A10:A' + (totalsRow - 1);
+      const qtyRange = 'E10:E' + (totalsRow - 1);
+      const amountRange = 'H10:H' + (totalsRow - 1);
       
       sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
       sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
@@ -1478,6 +1597,7 @@ function installOnEditTrigger() {
  *   - E5 (Delivery Location) → syncs to _OrderData
  *   - H3 (Order Date) → Col 3 + syncs to _OrderData
  *   - H4 (Phone) → syncs to _OrderData
+ *   - H5 (PO Number) → syncs to _OrderData
  *   - F (Base Cost) → recalculates total, syncs to _OrderData
  *   - E (Qty) → recalculates total, syncs to _OrderData
  *   - G (Markup%) → recalculates total, syncs to _OrderData
@@ -1590,8 +1710,8 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
       logAction('Sync', 'Sheet→Data: ExportStatus for ' + docNumber, 'Success');
     }
     
-    // Any item data changed (rows 9+, columns E=Qty, F=Base Cost, G=Markup%, H=Total)
-    if (row >= 9 && (col === 5 || col === 6 || col === 7 || col === 8)) {
+    // Any item data changed (rows 10+, columns E=Qty, F=Base Cost, G=Markup%, H=Total)
+    if (row >= 10 && (col === 5 || col === 6 || col === 7 || col === 8)) {
       shouldSync = true;
       logAction('Sync', 'Sheet→Master: Item data updated for ' + docNumber, 'Info');
     }
@@ -1606,6 +1726,12 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
     if (row === 4 && col === 8) {
       shouldSync = true;
       logAction('Sync', 'Sheet→Data: Phone for ' + docNumber, 'Info');
+    }
+    
+    // PO Number changed (H5)
+    if (row === 5 && col === 8) {
+      shouldSync = true;
+      logAction('Sync', 'Sheet→Data: PO Number for ' + docNumber, 'Info');
     }
     
     // Delivery Location changed (E5)
@@ -1667,7 +1793,7 @@ function exportCurrentOrderSheet() {
   // Check if order has items with costs
   let hasCosts = false;
   
-  for (var row = 9; row <= lastItemRow; row++) {
+  for (var row = 10; row <= lastItemRow; row++) {
     const itemCode = sheet.getRange(row, 1).getValue();
     const baseCost = sheet.getRange(row, 6).getValue(); // Column F (Base Cost)
     if (itemCode && baseCost > 0) {
@@ -2456,6 +2582,7 @@ function submitWebAppOrder(orderData) {
       txnDate: orderData.orderDate || todayYMD(),
       deliveryLocation: orderData.deliveryLocation || '',
       phone: orderData.phone || '',
+      po: orderData.po || '',
       notes: orderData.notes || '',
       items: items
     };
@@ -2578,9 +2705,9 @@ function calculateOrderSheetPositions(orderSheet) {
   try {
     const maxRows = Math.min(orderSheet.getLastRow(), 200); // Limit search range
     
-    // Find the last row with item data (look for items starting at row 9)
-    let lastItemRow = 9;
-    for (var row = 9; row <= maxRows; row++) {
+    // Find the last row with item data (look for items starting at row 10)
+    let lastItemRow = 10;
+    for (var row = 10; row <= maxRows; row++) {
       const itemCode = orderSheet.getRange(row, 1).getValue();
       const cellValue = String(itemCode).trim();
       
@@ -2926,3 +3053,17 @@ function getWebAppUrl() {
 // - Issues: Check Logs sheet for errors
 // - Updates: Re-paste updated code, refresh sheet
  /*************************************************/
+ function grantUrlFetchAccess() {
+  var url = LICENSE_URL + (LICENSE_URL.indexOf('?') === -1 ? '?' : '&') + '_=' + Date.now();
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true, timeout: 5000 });
+  Logger.log('HTTP ' + res.getResponseCode() + ' — ' + (res.getContentText() || '').slice(0, 100));
+}
+// Build license URL; if TENANT_ID is empty (single-tenant) no tenant param is added
+function buildLicenseUrl() {
+  var url = LICENSE_URL;
+  var hasQuery = url.indexOf('?') !== -1;
+  var sep = hasQuery ? '&' : '?';
+  var tenant = (typeof TENANT_ID === 'string' ? TENANT_ID : '').trim();
+  if (tenant) url += sep + 'tenant=' + encodeURIComponent(tenant);
+  return url;
+}
