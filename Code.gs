@@ -1,12 +1,83 @@
 /*************************************************
- * TUG OPS V4 – COMPLETE PRODUCTION-READY SYSTEM
+ * DUPUYS DOCKSIDE V4 – COMPLETE PRODUCTION-READY SYSTEM
  * Ready for fresh Google Sheet initialization
  * 
  * SETUP: Just paste this code and run:
- * Menu > ⚓ Tug Ops V4 > 🔧 Initialize System
+ * Menu > ⚓ Dupuys Dockside V4 > 🔧 Initialize System
  *************************************************/
 
 /******** CONFIG ********/
+
+// ===== SIMPLE LICENSE CHECK (Subterra) =====
+// Set these two values per client deployment:
+const LICENSE_URL = 'https://script.google.com/macros/s/YOUR_WEB_APP_URL/exec'; // <-- replace with your real URL
+const TENANT_ID   = 'client-xyz'; // <-- change per client
+const FAIL_OPEN   = false; // fail-closed to avoid simple trigger bypass
+const LICENSE_CACHE_MS = 15 * 60 * 1000; // cache license result for 15 minutes
+
+// Contact + suspension messaging (shown when account is locked)
+const SUPPORT_CONTACT = 'support@subterra.one';
+const LOCK_MESSAGE =
+  '🔒 Service is suspended due to non-payment. If this is a misunderstanding or you believe you are current, ' +
+  'please contact Subterra at ' + SUPPORT_CONTACT + ' to restore access.';
+
+function isLicensed() {
+  const props = PropertiesService.getScriptProperties();
+  const k = 'LIC:' + TENANT_ID;
+
+  // 1) Use fresh cached value if available (avoids UrlFetch inside simple triggers)
+  const cached = props.getProperty(k);
+  if (cached) {
+    const parts = cached.split('|');
+    const status = parts[0];
+    const ts = Number(parts[1] || 0);
+    if (Date.now() - ts < LICENSE_CACHE_MS) {
+      return status === 'ok';
+    }
+  }
+
+  // 2) Refresh from server (this may fail in simple triggers; we handle that below)
+  try {
+    const res = UrlFetchApp.fetch(LICENSE_URL + '?tenant=' + encodeURIComponent(TENANT_ID), {
+      muteHttpExceptions: true,
+      followRedirects: true,
+      timeout: 2000
+    });
+    const ok = res.getResponseCode() === 200 && (res.getContentText() || '').trim() === 'ok';
+    props.setProperty(k, (ok ? 'ok' : 'locked') + '|' + String(Date.now()));
+    return ok;
+  } catch (e) {
+    // 3) On fetch error (e.g., simple trigger auth), fall back to cached status if present; otherwise fail-closed
+    if (cached) {
+      const status = cached.split('|')[0];
+      return status === 'ok';
+    }
+    return !!FAIL_OPEN; // with FAIL_OPEN=false this will lock on first-run in simple-trigger contexts
+  }
+}
+
+function isLicensedCachedOnly() {
+  const props = PropertiesService.getScriptProperties();
+  const k = 'LIC:' + TENANT_ID;
+  const cached = props.getProperty(k);
+  if (!cached) return null; // unknown
+  const parts = cached.split('|');
+  const status = parts[0];
+  const ts = Number(parts[1] || 0);
+  if (Date.now() - ts > LICENSE_CACHE_MS) return null; // stale
+  return status === 'ok';
+}
+
+function requireLicense(msg) {
+  if (isLicensed()) return true;
+  SpreadsheetApp.getUi().alert(msg || LOCK_MESSAGE);
+  throw new Error('Service locked');
+}
+
+function showLocked() {
+  SpreadsheetApp.getUi().alert(LOCK_MESSAGE);
+}
+
 const SHEET = {
   ORDER_MASTER: 'ORDER_MASTER',
   PRICEBOOK: 'PriceBook',
@@ -24,6 +95,11 @@ const EXPORT_CHOICES = ['', 'Ready', 'Exported'];
 const DRIVE_FOLDER_ID = '';
 const CURRENT_SCHEMA_VERSION = 4;
 const ORDER_SHEET_PREFIX = 'ORDER_';
+
+// QuickBooks IIF Export Settings
+// Account NAMES for IIF export (QuickBooks requires names, not numbers for invoices)
+const QB_AR_ACCOUNT = 'Accounts Receivable';  // A/R account name
+const QB_INCOME_ACCOUNT = 'Sales Income';  // Income account name (must exist in your Chart of Accounts)
 
 /******** CACHE MANAGER ********/
 const CacheManager = (function() {
@@ -62,6 +138,17 @@ function clearCache() {
 
 /******** MENU ********/
 function onOpen() {
+  // Use cached-only status to avoid UrlFetch in simple trigger
+  const lic = isLicensedCachedOnly();
+  if (lic === false) {
+    SpreadsheetApp.getUi()
+      .createMenu('⚓ Dupuys')
+      .addItem('🔒 Service Locked', 'showLocked')
+      .addToUi();
+    showLocked(); // immediate clarity
+    return;
+  }
+  // lic is true or unknown -> build menus; actions are still gated by requireLicense()
   if (CLIENT_MODE) {
     buildClientMenu();
   } else {
@@ -77,8 +164,10 @@ function buildClientMenu() {
     .addItem('📋 Order Master', 'openOrderMaster')
     .addSeparator()
     .addSubMenu(ui.createMenu('💰 QuickBooks Export')
-      .addItem('Export Current Order', 'exportCurrentOrderSheet')
-      .addItem('Export Ready Batch', 'exportReadyBatch'))
+      .addItem('📄 Export Current Order', 'exportCurrentOrderSheet')
+      .addItem('📄 Export Ready Batch', 'exportReadyBatch')
+      .addSeparator()
+      .addItem('📦 Export Items (Optional)', 'exportPriceBookToQuickBooks'))
     .addSubMenu(ui.createMenu('📦 Archive Orders')
       .addItem('Archive Current Order', 'archiveCurrentOrder')
       .addItem('Archive All Exported Orders', 'archiveExported'))
@@ -100,7 +189,7 @@ function buildClientMenu() {
 function buildAdminMenu() {
   const ui = SpreadsheetApp.getUi();
   
-  ui.createMenu('⚓ Tug Ops V4 [ADMIN]')
+  ui.createMenu('⚓ Dupuys Dockside V4 [ADMIN]')
     .addItem('🔧 Initialize System', 'initializeWorkbook')
     .addItem('🌱 Seed Sample Data', 'seedSampleData')
     .addItem('✅ Deployment Checklist', 'runDeploymentChecklist')
@@ -130,13 +219,16 @@ function buildAdminMenu() {
       .addItem('🔗 Reinstall Edit Sync', 'installOnEditTrigger'))
     .addSeparator()
     .addSubMenu(ui.createMenu('💰 QuickBooks')
-      .addItem('Export Current Order', 'exportCurrentOrderSheet')
-      .addItem('Export Ready Batch', 'exportReadyBatch'))
+      .addItem('📄 Export Current Order', 'exportCurrentOrderSheet')
+      .addItem('📄 Export Ready Batch', 'exportReadyBatch')
+      .addSeparator()
+      .addItem('📦 Export Items (Optional)', 'exportPriceBookToQuickBooks'))
     .addSubMenu(ui.createMenu('📦 Archive')
       .addItem('Archive Current Order', 'archiveCurrentOrder')
       .addItem('Archive All Exported Orders', 'archiveExported'))
     .addSeparator()
     .addItem('🗑️ Clear Cache', 'clearCache')
+    .addItem('🔧 Fix Circular References', 'fixCircularReferenceInOrderSheets')
     .addItem('🔧 Switch to Client Mode', 'switchToClientMode')
     .addToUi();
 }
@@ -146,7 +238,7 @@ function showClientHelp() {
   const ui = SpreadsheetApp.getUi();
   const webAppUrl = 'Not configured - Ask administrator';
   
-  const helpText = '📖 TUG OPS - QUICK START GUIDE\n\n' +
+  const helpText = '📖 DUPUYS DOCKSIDE - QUICK START GUIDE\n\n' +
     '═══════════════════════════════════\n\n' +
     '📋 DAILY WORKFLOW:\n\n' +
     '1️⃣ View Orders\n' +
@@ -661,12 +753,16 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   // Border around items table
   sheet.getRange('A8:H' + (currentRow - 1)).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
-  // Totals row with strong styling
+  // Totals row with strong styling (using dynamic formulas that adapt to added rows)
   const totalsRow = currentRow + 1;
   sheet.getRange(totalsRow, 1, 1, 4).merge().setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
-  sheet.getRange(totalsRow, 5).setFormula('=SUM(E9:E' + (currentRow - 1) + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
+  // Use SUMIF to dynamically sum all non-empty rows BEFORE the totals row (avoiding circular reference)
+  const sumRange = 'A9:A' + (totalsRow - 1);
+  const qtyRange = 'E9:E' + (totalsRow - 1);
+  const amountRange = 'H9:H' + (totalsRow - 1);
+  sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
   sheet.getRange(totalsRow, 6, 1, 2).merge().setBackground('#34a853');
-  sheet.getRange(totalsRow, 8).setFormula('=SUM(H9:H' + (currentRow - 1) + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
   sheet.getRange(totalsRow, 1, 1, 8).setBorder(true, true, true, true, false, false, '#34a853', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // ========== NOTES SECTION ==========
@@ -819,6 +915,8 @@ function addToOrderMaster(orderInfo, sheetName) {
  * Automatically unhides order sheets when user clicks "Open Order" link in ORDER_MASTER
  */
 function onSelectionChange(e) {
+  const licCached = isLicensedCachedOnly();
+  if (licCached === false) return; // locked -> quietly no-op
   if (!e || !e.range) return;
   
   try {
@@ -962,6 +1060,7 @@ function updateMasterIndex(docNumber, status, itemCount, total, assignedTo) {
 
 /******** FORM SUBMISSION ********/
 function onFormSubmit(e) {
+  requireLicense('🔒 Submissions are disabled because this account is past due. If this is a misunderstanding, contact Subterra at ' + SUPPORT_CONTACT + '.');
   try {
     const named = e.namedValues || {};
     
@@ -1038,6 +1137,7 @@ function onFormSubmit(e) {
 
 /******** WEB APP DEPLOYMENT INFO ********/
 function showWebAppDeploymentInstructions() {
+  requireLicense();
   const ui = SpreadsheetApp.getUi();
   
   const instructions = 'WEB APP DEPLOYMENT INSTRUCTIONS:\n\n' +
@@ -1057,6 +1157,7 @@ function showWebAppDeploymentInstructions() {
 }
 
 function getWebAppUrl() {
+  requireLicense();
   const ui = SpreadsheetApp.getUi();
   ui.alert(
     'Web App URL',
@@ -1067,6 +1168,49 @@ function getWebAppUrl() {
     '4. Copy the "Web app URL"\n\n' +
     'Share that URL with boat captains to place orders.',
     ui.ButtonSet.OK
+  );
+}
+
+/******** FIX CIRCULAR REFERENCE IN ORDER SHEETS ********/
+function fixCircularReferenceInOrderSheets() {
+  const ss = SpreadsheetApp.getActive();
+  const sheets = ss.getSheets();
+  let fixedCount = 0;
+  
+  for (var i = 0; i < sheets.length; i++) {
+    const sheet = sheets[i];
+    const sheetName = sheet.getName();
+    
+    // Only process order sheets
+    if (sheetName.indexOf(ORDER_SHEET_PREFIX) !== 0) continue;
+    
+    try {
+      // Find the totals row
+      const positions = calculateOrderSheetPositions(sheet);
+      const totalsRow = positions.totalsRow;
+      
+      // Fix the formulas to exclude the totals row itself
+      const sumRange = 'A9:A' + (totalsRow - 1);
+      const qtyRange = 'E9:E' + (totalsRow - 1);
+      const amountRange = 'H9:H' + (totalsRow - 1);
+      
+      sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
+      sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
+      
+      fixedCount++;
+      
+    } catch (err) {
+      logAction('FixCircular', 'Failed to fix ' + sheetName + ': ' + String(err), 'Warning');
+    }
+  }
+  
+  uiToast('✅ Fixed ' + fixedCount + ' order sheet(s)');
+  SpreadsheetApp.getUi().alert(
+    '✅ Circular Reference Fixed',
+    'Updated ' + fixedCount + ' order sheet(s).\n\n' +
+    'The totals formulas have been corrected to avoid circular dependencies.\n\n' +
+    'New orders will automatically use the correct formula.',
+    SpreadsheetApp.getUi().ButtonSet.OK
   );
 }
 
@@ -1296,6 +1440,7 @@ function seedSampleData() {
 
 /******** INSTALL ON EDIT TRIGGER ********/
 function installOnEditTrigger() {
+  requireLicense();
   const triggers = ScriptApp.getProjectTriggers();
   
   // Remove existing onEdit triggers
@@ -1341,6 +1486,7 @@ function installOnEditTrigger() {
  * All syncs update "Last Updated" timestamp automatically
  */
 function onEditHandler(e) {
+  if (!isLicensed()) return; // silently no-op when locked
   if (!e || !e.range) return;
   
   const sheet = e.range.getSheet();
@@ -1502,6 +1648,7 @@ function updateMasterField(masterSheet, docNumber, fieldName, value) {
 
 /******** EXPORT CURRENT ORDER SHEET ********/
 function exportCurrentOrderSheet() {
+  requireLicense();
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getActiveSheet();
   const sheetName = sheet.getName();
@@ -1539,6 +1686,7 @@ function exportCurrentOrderSheet() {
 
 /******** EXPORT READY BATCH ********/
 function exportReadyBatch() {
+  requireLicense('🔒 Exports disabled. Account is past due. If this is a misunderstanding, contact Subterra at ' + SUPPORT_CONTACT + '.');
   const ss = SpreadsheetApp.getActive();
   const dataSheet = ss.getSheetByName(SHEET.ORDER_DATA);
   
@@ -1671,12 +1819,17 @@ function exportOrders(mode, singleDocNumber) {
       };
     }
     
+    // Sanitize line: force positive Qty/Rate, recompute Amount
+    const _qty  = Math.abs(Number(line.qty)  || 0);
+    const _rate = Math.abs(Number(line.rate) || 0);
+    const _amt  = round2(_qty * _rate);
+
     invoicesByDoc[docNum].lines.push({
       item: line.item,
       description: line.item,
-      qty: line.qty,
-      rate: line.rate,
-      amount: line.amount,
+      qty: _qty,
+      rate: _rate,
+      amount: _amt,
       taxCode: line.taxCode
     });
   }
@@ -1690,8 +1843,8 @@ function exportOrders(mode, singleDocNumber) {
   const qbdIif = buildQbdIif(invoices);
   
   const folder = getDriveFolder();
-  const qboFile = folder.createFile('TugOps_QBO_' + mode + '_' + timestamp + '.csv', qboCsv, MimeType.CSV);
-  const qbdFile = folder.createFile('TugOps_QBD_' + mode + '_' + timestamp + '.iif', qbdIif, MimeType.PLAIN_TEXT);
+  const qboFile = folder.createFile('Dupuys_QBO_' + mode + '_' + timestamp + '.csv', qboCsv, MimeType.CSV);
+  const qbdFile = folder.createFile('Dupuys_QBD_' + mode + '_' + timestamp + '.iif', qbdIif, MimeType.PLAIN_TEXT);
   
   const qboUrl = qboFile.getUrl();
   const qbdUrl = qbdFile.getUrl();
@@ -1707,11 +1860,11 @@ function exportOrders(mode, singleDocNumber) {
       // Calculate dynamic row positions based on current sheet content
       const positions = calculateOrderSheetPositions(orderSheet);
       
-      // Update QB Export Link (dynamic row, col 2)
-      orderSheet.getRange(positions.qbExportLinkRow, 2, 1, 6).merge().setValue(qboUrl);
+      // Update QB Export Link (just set value, cells already merged)
+      orderSheet.getRange(positions.qbExportLinkRow, 2).setValue(qboUrl);
       
-      // Update Export Status to "Exported"
-      orderSheet.getRange(positions.exportStatusRow, 2, 1, 2).merge().setValue('Exported');
+      // Update Export Status to "Exported" (just set value, cells already merged)
+      orderSheet.getRange(positions.exportStatusRow, 2).setValue('Exported');
       
       // Add export note
       orderSheet.getRange(positions.qbExportLinkRow + 1, 1).setValue('Last Exported:').setFontWeight('bold');
@@ -1732,95 +1885,191 @@ function exportOrders(mode, singleDocNumber) {
     '📄 QuickBooks Online CSV: ' + qboFile.getName() + '\n' +
     '📄 QuickBooks Desktop IIF: ' + qbdFile.getName() + '\n\n' +
     'Files saved to: ' + folder.getName() + '\n\n' +
+    'ℹ️ Items referenced in invoices will be auto-created as SERV (service) items by QuickBooks.\n' +
+    'No need to pre-import items!\n\n' +
     'Download links added to order sheets.',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
+/******** EXPORT PRICEBOOK ITEMS TO QUICKBOOKS (OPTIONAL) ********/
+// This export is OPTIONAL - QuickBooks will auto-create SERV (service) items when importing invoices
+// Use this only if you want to pre-define item descriptions or default prices
+function exportPriceBookToQuickBooks() {
+  requireLicense();
+  const items = DataLayer.getPriceBookItems();
+  
+  if (items.length === 0) {
+    SpreadsheetApp.getUi().alert('⚠️ No items in PriceBook', 'Add items to your PriceBook first.', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  // Build IIF for non-inventory items
+  const lines = [];
+  lines.push('!INVITEM\tNAME\tINVITEMTYPE\tDESC\tACCNT\tPRICE');
+  
+  for (var i = 0; i < items.length; i++) {
+    const item = items[i];
+    const sellingPrice = item.basePrice + (item.basePrice * item.defaultMarkup / 100);
+    
+    // Ensure all fields have values (IIF format requires no empty fields)
+    const itemName = sanitizeTab(item.item) || 'ITEM';
+    const itemDesc = sanitizeTab(item.notes || item.item) || itemName;
+    const itemPrice = numStr(sellingPrice) || '0.00';
+    
+    lines.push([
+      'INVITEM',
+      itemName,                                  // NAME - item code (required)
+      'SERV',                                    // INVITEMTYPE - service item
+      itemDesc,                                  // DESC - description (required)
+      QB_INCOME_ACCOUNT || 'Sales Income',       // ACCNT - income account name (required)
+      itemPrice                                  // PRICE - selling price (required)
+    ].join('\t'));
+  }
+  
+  const iifContent = lines.join('\n');
+  
+  // Save to Drive
+  const tz = Session.getScriptTimeZone();
+  const timestamp = Utilities.formatDate(new Date(), tz, 'yyyyMMdd_HHmmss');
+  const folder = getDriveFolder();
+  const file = folder.createFile('Dupuys_Items_' + timestamp + '.iif', iifContent, MimeType.PLAIN_TEXT);
+  
+  logAction('ExportItems', 'Exported ' + items.length + ' items to IIF', 'Success');
+  
+  SpreadsheetApp.getUi().alert(
+    '✅ PriceBook Items Exported!',
+    'Exported ' + items.length + ' non-inventory item(s) to:\n\n' +
+    '📄 ' + file.getName() + '\n\n' +
+    '📁 Location: ' + folder.getName() + '\n\n' +
+    'ℹ️ NOTE: This export is OPTIONAL!\n\n' +
+    'QuickBooks will automatically create items as SERV (service type) ' +
+    'when you import invoices that reference them.\n\n' +
+    'Use this export only if you want to:\n' +
+    '• Pre-define item descriptions\n' +
+    '• Set specific default prices\n' +
+    '• Control item setup before invoicing\n\n' +
+    'Otherwise, just import your invoices directly!\n\n' +
+    'Items will post to: ' + QB_INCOME_ACCOUNT,
     SpreadsheetApp.getUi().ButtonSet.OK
   );
 }
 
 /******** BUILD QUICKBOOKS ONLINE CSV ********/
 function buildQboCsv(invoices) {
-  const headers = ['*DocNumber', '*TxnDate', '*Customer', 'Terms', '*LineItem', 'Description', '*Qty', '*Rate', 'TaxCode', 'Message', 'Class'];
+  // Force positive Qty & Rate; compute Amount = Qty * Rate
+  // Columns are simple so you can map them easily in QBO.
+  const headers = ['*Qty', '*ItemCode', '*PriceEach', '*AmountTotal'];
   const rows = [headers.join(',')];
-  
+
+  function numStr(n) {
+    return (Number(n) || 0).toFixed(2);
+  }
+  function esc(v) {
+    var s = String(v == null ? '' : v);
+    if (s.indexOf('"') !== -1 || s.indexOf(',') !== -1 || s.indexOf('\n') !== -1) {
+      s = '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  }
+
   for (var i = 0; i < invoices.length; i++) {
-    const inv = invoices[i];
-    const txnDate = inv.txnDate || todayYMD();
-    
+    var inv = invoices[i];
+
     for (var j = 0; j < inv.lines.length; j++) {
-      const line = inv.lines[j];
-      const record = [
-        csvEscape(inv.docNumber),
-        csvEscape(txnDate),
-        csvEscape(inv.customer),
-        csvEscape(inv.terms),
-        csvEscape(line.item),
-        csvEscape(line.description),
-        line.qty,
-        line.rate.toFixed(2),
-        csvEscape(line.taxCode),
-        csvEscape(inv.memo),
-        csvEscape(inv.class)
+      var line = inv.lines[j];
+
+      var qty = Math.abs(Number(line.qty) || 0);
+      var rate = Math.abs(Number(line.rate) || 0);
+      var amount = round2(qty * rate);
+
+      var record = [
+        qty,                  // leave quantity unformatted for mapper
+        esc(line.item),
+        numStr(rate),
+        numStr(amount)
       ];
+
       rows.push(record.join(','));
     }
   }
-  
+
   return rows.join('\n');
 }
 
 /******** BUILD QUICKBOOKS DESKTOP IIF ********/
+// QuickBooks will auto-create items as SERV (service type) when referenced in invoices
+// No need to pre-import items - they're created on-the-fly during invoice import
 function buildQbdIif(invoices) {
   const lines = [];
-  lines.push('!TRNS\tTRNSTYPE\tDATE\tNUM\tNAME\tCLASS\tTERMS\tAMOUNT\tMEMO');
-  lines.push('!SPL\tTRNSTYPE\tDATE\tNAME\tCLASS\tITEM\tQNTY\tPRICE\tAMOUNT\tMEMO');
+  lines.push('!TRNS\tTRNSTYPE\tDATE\tACCNT\tNAME\tCLASS\tDOCNUM\tTERMS\tAMOUNT\tMEMO');
+  lines.push('!SPL\tTRNSTYPE\tDATE\tACCNT\tNAME\tCLASS\tINVITEM\tQNTY\tPRICE\tAMOUNT\tMEMO');
   lines.push('!ENDTRNS');
-  
+
   for (var i = 0; i < invoices.length; i++) {
     const inv = invoices[i];
-    const date = inv.txnDate || todayYMD();
-    
-    // Calculate total
+
+    // --- Date -> MM/DD/YYYY ---
+    let date = inv.txnDate || todayYMD();
+    if (date instanceof Date) {
+      date = Utilities.formatDate(date, Session.getScriptTimeZone(), 'MM/dd/yyyy');
+    } else {
+      const d = new Date(date);
+      if (!isNaN(d.getTime())) date = Utilities.formatDate(d, Session.getScriptTimeZone(), 'MM/dd/yyyy');
+    }
+
+    // --- Compute positive total from positive qty*rate ---
     var total = 0;
     for (var j = 0; j < inv.lines.length; j++) {
-      total += Number(inv.lines[j].amount || 0);
+      const q = Math.abs(Number(inv.lines[j].qty) || 0);
+      const r = Math.abs(Number(inv.lines[j].rate) || 0);
+      total += round2(q * r);
     }
-    const negTotal = -round2(total);
-    
-    // TRNS line (invoice header)
+    const invoiceTotal = round2(total);
+
+    // Optional: keep DOCNUM short for Desktop
+    let doc = String(inv.docNumber || '').trim();
+    if (doc.length > 11) doc = doc.substring(0, 11);
+
+    // --- Header (TRNS) - POSITIVE amount ---
     lines.push([
       'TRNS',
       'INVOICE',
       date,
-      sanitizeTab(inv.docNumber),
+      QB_AR_ACCOUNT,
       sanitizeTab(inv.customer),
       sanitizeTab(inv.class),
-      sanitizeTab(inv.terms),
-      numStr(negTotal),
-      sanitizeTab(inv.memo)
+      sanitizeTab(doc),
+      sanitizeTab(inv.terms || 'Net 7'),
+      numStr(invoiceTotal),        // POSITIVE
+      sanitizeTab(inv.memo || '')
     ].join('\t'));
-    
-    // SPL lines (invoice items)
+
+    // --- Lines (SPL) - NEGATIVE qty (QB Desktop convention), POSITIVE rate, AMOUNT blank ---
     for (var k = 0; k < inv.lines.length; k++) {
-      const line = inv.lines[k];
-      const amt = round2(Number(line.amount || 0));
-      
+      const L = inv.lines[k];
+      const qty  = Math.abs(Number(L.qty)  || 0);
+      const rate = Math.abs(Number(L.rate) || 0);
+      const memo = sanitizeTab(L.description || L.item);
+
       lines.push([
         'SPL',
         'INVOICE',
         date,
+        QB_INCOME_ACCOUNT,                            // Income account (e.g., "Sales Income")
         sanitizeTab(inv.customer),
         sanitizeTab(inv.class),
-        sanitizeTab(line.item),
-        numStr(line.qty),
-        numStr(line.rate),
-        numStr(-amt),
-        sanitizeTab(line.description)
+        sanitizeTab(L.item),
+        numStr(-qty),                                 // NEGATIVE qty (lets QB compute a negative line amount)
+        numStr(rate),                                 // POSITIVE rate
+        '',                                           // AMOUNT left blank so QB computes from qty*rate
+        memo
       ].join('\t'));
     }
-    
+
     lines.push('ENDTRNS');
   }
-  
+
   return lines.join('\n');
 }
 
@@ -1889,6 +2138,7 @@ function archiveOrderToDrive(docNumber) {
 
 /******** ARCHIVE CURRENT ORDER ********/
 function archiveCurrentOrder() {
+  requireLicense();
   const ss = SpreadsheetApp.getActive();
   const sheet = ss.getActiveSheet();
   const sheetName = sheet.getName();
@@ -1942,6 +2192,7 @@ function archiveCurrentOrder() {
 
 /******** ARCHIVE ALL EXPORTED ORDERS ********/
 function archiveExported() {
+  requireLicense();
   const ss = SpreadsheetApp.getActive();
   const dataSheet = ss.getSheetByName(SHEET.ORDER_DATA);
   
@@ -2035,43 +2286,58 @@ function archiveExported() {
   SpreadsheetApp.getUi().alert('Archive Complete', message, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
-/******** REMOVE FROM ORDER MASTER ********/
+/******** ORDER_MASTER ROW DELETE (PRESERVE FORMATTING/LINKS) ********/
 function removeFromOrderMaster(docNumbers) {
   const ss = SpreadsheetApp.getActive();
   const master = ss.getSheetByName(SHEET.ORDER_MASTER);
-  
-  if (!master || master.getLastRow() <= 5) return;
-  
-  // Get header rows (1-5) and data rows (6+)
-  const headerRows = master.getRange(1, 1, 5, master.getLastColumn()).getValues();
-  const dataRows = master.getRange(6, 1, master.getLastRow() - 5, master.getLastColumn()).getValues();
-  
-  // Filter out the orders to be archived
-  const keepDataRows = [];
-  for (var i = 0; i < dataRows.length; i++) {
-    const docNum = String(dataRows[i][1]).trim(); // DocNumber is in column 2 (index 1)
-    if (docNumbers.indexOf(docNum) === -1) {
-      keepDataRows.push(dataRows[i]);
+  if (!master) return;
+
+  // Header row is 5 in buildOrderMasterSheet()
+  const HEADER_ROW = 5;
+  const headers = master.getRange(HEADER_ROW, 1, 1, master.getLastColumn()).getValues()[0];
+  const idx = makeHeaderIndex(headers);
+
+  if (master.getLastRow() <= HEADER_ROW) return;
+
+  const firstDataRow = HEADER_ROW + 1;
+  const data = master.getRange(firstDataRow, 1, master.getLastRow() - HEADER_ROW, master.getLastColumn()).getValues();
+
+  // Map docNumbers for fast lookup
+  const toDelete = {};
+  (docNumbers || []).forEach(d => { if (d) toDelete[String(d).trim()] = true; });
+
+  // Collect absolute sheet row numbers to delete
+  const rowsToDelete = [];
+  for (var r = 0; r < data.length; r++) {
+    const doc = String(data[r][idx['DocNumber']]).trim();
+    if (toDelete[doc]) rowsToDelete.push(firstDataRow + r);
+  }
+  if (rowsToDelete.length === 0) return;
+
+  // Delete from bottom to top (preserves formatting of remaining rows)
+  rowsToDelete.sort((a,b) => b - a).forEach(rowNum => master.deleteRow(rowNum));
+
+  // Renumber the "#" column only
+  const lastRow = master.getLastRow();
+  if (lastRow >= firstDataRow) {
+    const n = lastRow - HEADER_ROW;
+    const numbers = Array.from({length: n}, (_, i) => [i + 1]);
+    master.getRange(firstDataRow, 1, n, 1).setValues(numbers);
+  }
+
+  // Re-apply banding to data area only (don’t touch header/title)
+  try {
+    const dataArea = master.getRange(firstDataRow, 1, Math.max(0, master.getLastRow() - HEADER_ROW), master.getLastColumn());
+    const bandings = dataArea.getBandings();
+    bandings.forEach(b => b.remove());
+    if (dataArea.getNumRows() > 0) {
+      const b = dataArea.applyRowBanding(SpreadsheetApp.BandingTheme.CYAN, false, false);
+      b.setFirstRowColor('#ffffff').setSecondRowColor('#f8f9fa');
     }
-  }
-  
-  // Clear the sheet
-  master.clear();
-  
-  // Rebuild: Write headers first (rows 1-5)
-  master.getRange(1, 1, headerRows.length, headerRows[0].length).setValues(headerRows);
-  
-  // Then write kept data rows (starting at row 6)
-  if (keepDataRows.length > 0) {
-    master.getRange(6, 1, keepDataRows.length, keepDataRows[0].length).setValues(keepDataRows);
-  }
-  
-  // Reapply formatting
-  master.getRange('A1:L1').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold').setFontSize(16);
-  master.getRange('A2:L2').setBackground('#e8f0fe');
-  master.getRange('A5:L5').setBackground('#1a73e8').setFontColor('white').setFontWeight('bold');
-  master.getRange('H:H').setNumberFormat('$#,##0.00');
-  master.setFrozenRows(5);
+  } catch (_e) { /* optional */ }
+
+  // Keep the stat formula intact
+  try { master.getRange('B4').setFormula('=COUNTA(B6:B)'); } catch (_e) {}
 }
 
 /******** REMOVE FROM ORDER DATA ********/
@@ -2120,27 +2386,27 @@ function round2(num) {
 }
 
 function getDriveFolder() {
-  if (DRIVE_FOLDER_ID) {
-    try {
-      return DriveApp.getFolderById(DRIVE_FOLDER_ID);
-    } catch (e) {
-      // Fall through to root
-    }
+  // Get the spreadsheet file's location in Google Drive
+  const ss = SpreadsheetApp.getActive();
+  const ssFile = DriveApp.getFileById(ss.getId());
+  const parentFolders = ssFile.getParents();
+  
+  // Get the parent folder of the spreadsheet (or root if none)
+  const parentFolder = parentFolders.hasNext() ? parentFolders.next() : DriveApp.getRootFolder();
+  
+  // Look for existing QuickBooks_Exports folder in the same location
+  const existingFolders = parentFolder.getFoldersByName('QuickBooks_Exports');
+  if (existingFolders.hasNext()) {
+    return existingFolders.next();
   }
   
-  // Try to find/create TugOps folder
-  const folders = DriveApp.getFoldersByName('TugOps_Exports');
-  if (folders.hasNext()) {
-    return folders.next();
-  }
-  
-  // Create new folder
-  return DriveApp.createFolder('TugOps_Exports');
+  // Create new QuickBooks_Exports folder in the same location as the spreadsheet
+  return parentFolder.createFolder('QuickBooks_Exports');
 }
 
 /******** WEB APP ********/
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('order_form_webapp').setTitle('Tug Boat Order Form');
+  return HtmlService.createHtmlOutputFromFile('order_form_webapp').setTitle('Dupuys Dockside Order Form');
 }
 
 function getItemsForWebApp() {
@@ -2307,27 +2573,60 @@ function convertSheetToTable(sheet, tableName) {
 /******** CALCULATE ORDER SHEET POSITIONS ********/
 function calculateOrderSheetPositions(orderSheet) {
   // Dynamically find row positions in order sheet based on current content
-  // This handles orders with any number of items
+  // This handles orders with any number of items and manually added items
   
   try {
+    const maxRows = Math.min(orderSheet.getLastRow(), 200); // Limit search range
+    
     // Find the last row with item data (look for items starting at row 9)
     let lastItemRow = 9;
-    for (var row = 9; row <= 100; row++) {
+    for (var row = 9; row <= maxRows; row++) {
       const itemCode = orderSheet.getRange(row, 1).getValue();
-      if (!itemCode) {
+      const cellValue = String(itemCode).trim();
+      
+      // Stop if we hit a section marker or empty after items
+      if (cellValue.indexOf('💰 TOTAL') === 0 || cellValue.indexOf('TOTAL') === 0) {
         lastItemRow = row - 1;
         break;
       }
+      if (cellValue && row > lastItemRow) {
+        lastItemRow = row;
+      }
     }
     
-    // Calculate positions based on actual content
-    const totalsRow = lastItemRow + 2;
+    // Search for actual section markers instead of calculating positions
+    let totalsRow = lastItemRow + 2;
+    let actionsRow = 0;
+    let exportStatusRow = 0;
+    let qbExportLinkRow = 0;
+    
+    // Find Actions section by searching for marker text
+    for (var searchRow = lastItemRow; searchRow <= maxRows; searchRow++) {
+      const cellA = String(orderSheet.getRange(searchRow, 1).getValue()).trim();
+      
+      // Look for "⚙️ Actions" or totals marker
+      if (cellA.indexOf('💰 TOTAL') === 0) {
+        totalsRow = searchRow;
+      }
+      if (cellA.indexOf('⚙️ Actions') === 0 || cellA.indexOf('Actions & Export') === 0) {
+        actionsRow = searchRow;
+      }
+      if (cellA.indexOf('Export Status') === 0) {
+        exportStatusRow = searchRow;
+      }
+      if (cellA.indexOf('QB Export Link') === 0) {
+        qbExportLinkRow = searchRow;
+      }
+    }
+    
+    // If markers not found, calculate based on last item
+    if (actionsRow === 0) actionsRow = lastItemRow + 15;
+    if (exportStatusRow === 0) exportStatusRow = actionsRow + 1;
+    if (qbExportLinkRow === 0) qbExportLinkRow = actionsRow + 3;
+    
     const notesRow = totalsRow + 2;
     const receiptSectionRow = notesRow + 5;
-    const actionsRow = receiptSectionRow + 8; // Receipt section is 7 rows (1 header + 6 content) + 1 spacer
-    const exportStatusRow = actionsRow + 1;
     const receiptLinkRow = actionsRow + 2;
-    const qbExportLinkRow = actionsRow + 3;
     
     return {
       lastItemRow: lastItemRow,
@@ -2411,7 +2710,7 @@ function padLeft(num, length) {
 }
 
 function uiToast(message) {
-  SpreadsheetApp.getActiveSpreadsheet().toast(message, '⚓ Tug Ops V4', 4);
+  SpreadsheetApp.getActiveSpreadsheet().toast(message, '⚓ Dupuys Dockside V4', 4);
 }
 
 function logAction(action, details, status) {
@@ -2444,6 +2743,7 @@ function testWebAppConnection() {
 
 /******** WEB APP DEPLOYMENT INFO ********/
 function showWebAppDeploymentInstructions() {
+  requireLicense();
   const ui = SpreadsheetApp.getUi();
   
   const instructions = 'WEB APP DEPLOYMENT INSTRUCTIONS:\n\n' +
@@ -2463,6 +2763,7 @@ function showWebAppDeploymentInstructions() {
 }
 
 function getWebAppUrl() {
+  requireLicense();
   const ui = SpreadsheetApp.getUi();
   ui.alert(
     'Web App URL',
@@ -2477,7 +2778,7 @@ function getWebAppUrl() {
 }
 
 /*************************************************
- * TUG OPS V4 - COMPLETE DEPLOYMENT GUIDE
+ * DUPUYS DOCKSIDE V4 - COMPLETE DEPLOYMENT GUIDE
  *************************************************/
 
 /*************************************************
@@ -2490,7 +2791,7 @@ function getWebAppUrl() {
 // 5. Save (Ctrl+S or Cmd+S)
 // 6. Close Apps Script tab
 // 7. Refresh your Google Sheet
-// 8. You'll see "⚓ Tug Ops V4 [ADMIN]" menu appear
+// 8. You'll see "⚓ Dupuys Dockside V4 [ADMIN]" menu appear
 // 9. Run: Menu > 🔧 Initialize System
 // 10. Wait 10-15 seconds (creates all sheets with modern tables)
 
@@ -2526,7 +2827,7 @@ function getWebAppUrl() {
 //     - To: const CLIENT_MODE = true;
 //     - Save and refresh sheet
 //
-// 17. Menu will change to "⚓ Tug Ops" (simplified)
+// 17. Menu will change to "⚓ Dupuys" (simplified)
 //     - Clients see only necessary operations
 //     - Technical functions hidden
 //
@@ -2538,7 +2839,7 @@ function getWebAppUrl() {
 /*************************************************
  * CLIENT MODE FEATURES (Simplified Menu):
  *************************************************/
-// ⚓ Tug Ops Menu:
+// ⚓ Dupuys Menu:
 // - 📋 Order Master (view all orders)
 // - 🎯 CEO Dashboard (real-time metrics)
 // - 🛒 Shopping List (grouped by category)
@@ -2552,7 +2853,7 @@ function getWebAppUrl() {
 /*************************************************
  * ADMIN MODE FEATURES (Full Access):
  *************************************************/
-// ⚓ Tug Ops V4 [ADMIN] Menu:
+// ⚓ Dupuys Dockside V4 [ADMIN] Menu:
 // - All client features PLUS:
 // - 🔧 Initialize System
 // - 🌱 Seed Sample Data

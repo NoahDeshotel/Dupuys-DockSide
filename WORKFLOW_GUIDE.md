@@ -2,7 +2,7 @@
 
 ## What's New?
 
-Your Tug Ops V3 system now has an **optimized order management workflow** with:
+Your Dupuys Dockside V3 system now has an **optimized order management workflow** with:
 
 ### 📥 **Order Inbox Dashboard**
 - CEO sees all new orders in one place
