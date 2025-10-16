@@ -760,7 +760,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   const now = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
   
   // ========== TITLE SECTION ==========
-  sheet.getRange('A1:H1').merge().setValue('🚢 ORDER DETAILS - ' + orderInfo.docNumber);
+  sheet.getRange('A1:I1').merge().setValue('🚢 ORDER DETAILS - ' + orderInfo.docNumber);
   sheet.getRange('A1')
     .setFontSize(16)
     .setFontWeight('bold')
@@ -823,7 +823,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   sheet.getRange('A3:H7').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // ========== ITEMS TABLE SECTION ==========
-  sheet.getRange('A8:H8').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
+  sheet.getRange('A8:I8').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
   sheet.getRange('A8')
     .setFontSize(14)
     .setFontWeight('bold')
@@ -832,8 +832,8 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setVerticalAlignment('middle')
     .setHorizontalAlignment('center');
   
-  const itemHeaders = ['Item Code', 'Description', 'Category', 'Unit', 'Qty', 'Base Cost', 'Markup %', 'Total'];
-  sheet.getRange('A9:H9')
+  const itemHeaders = ['Item Code', 'Description', 'Details (flavor, brand, etc)', 'Category', 'Unit', 'Qty', 'Base Cost', 'Markup %', 'Total'];
+  sheet.getRange('A9:I9')
     .setValues([itemHeaders])
     .setFontWeight('bold')
     .setBackground('#34a853')
@@ -842,7 +842,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setHorizontalAlignment('left');
   
   // Add header borders
-  sheet.getRange('A9:H9').setBorder(true, true, true, true, true, true, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  sheet.getRange('A9:I9').setBorder(true, true, true, true, true, true, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // Items data with alternating colors
   let currentRow = 10;
@@ -851,39 +851,40 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     const priceItem = DataLayer.getPriceBookItem(item.itemCode);
     
     const rowBg = i % 2 === 0 ? '#ffffff' : '#f1f8f4';
-    sheet.getRange(currentRow, 1, 1, 8).setBackground(rowBg);
+    sheet.getRange(currentRow, 1, 1, 9).setBackground(rowBg);
     
     sheet.getRange(currentRow, 1).setValue(item.itemCode);
     sheet.getRange(currentRow, 2).setValue(priceItem ? priceItem.notes : item.itemCode);
-    sheet.getRange(currentRow, 3).setValue(item.category);
-    sheet.getRange(currentRow, 4).setValue(item.unit);
-    sheet.getRange(currentRow, 5).setValue(item.qty);
-    sheet.getRange(currentRow, 6).setValue('').setBackground('#fff3cd'); // Highlight for manual entry
-    sheet.getRange(currentRow, 7).setValue(priceItem ? priceItem.defaultMarkup : 15);
-    sheet.getRange(currentRow, 8).setFormula('=IF(F' + currentRow + '>0, E' + currentRow + '*F' + currentRow + '*(1+G' + currentRow + '/100), "")');
+    sheet.getRange(currentRow, 3).setValue(item.itemNotes || '').setFontStyle('italic').setFontColor('#5f6368'); // Item-specific notes from customer
+    sheet.getRange(currentRow, 4).setValue(item.category);
+    sheet.getRange(currentRow, 5).setValue(item.unit);
+    sheet.getRange(currentRow, 6).setValue(item.qty);
+    sheet.getRange(currentRow, 7).setValue('').setBackground('#fff3cd'); // Highlight for manual entry
+    sheet.getRange(currentRow, 8).setValue(priceItem ? priceItem.defaultMarkup : 15);
+    sheet.getRange(currentRow, 9).setFormula('=IF(G' + currentRow + '>0, F' + currentRow + '*G' + currentRow + '*(1+H' + currentRow + '/100), "")');
     
     currentRow++;
   }
   
   // Border around items table
-  sheet.getRange('A9:H' + (currentRow - 1)).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange('A9:I' + (currentRow - 1)).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // Totals row with strong styling (using dynamic formulas that adapt to added rows)
   const totalsRow = currentRow + 1;
-  sheet.getRange(totalsRow, 1, 1, 4).merge().setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 1, 1, 5).merge().setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
   // Use SUMIF to dynamically sum all non-empty rows BEFORE the totals row (avoiding circular reference)
   const sumRange = 'A10:A' + (totalsRow - 1);
-  const qtyRange = 'E10:E' + (totalsRow - 1);
-  const amountRange = 'H10:H' + (totalsRow - 1);
-  sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
-  sheet.getRange(totalsRow, 6, 1, 2).merge().setBackground('#34a853');
-  sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
-  sheet.getRange(totalsRow, 1, 1, 8).setBorder(true, true, true, true, false, false, '#34a853', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  const qtyRange = 'F10:F' + (totalsRow - 1);
+  const amountRange = 'I10:I' + (totalsRow - 1);
+  sheet.getRange(totalsRow, 6).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 7, 1, 2).merge().setBackground('#34a853');
+  sheet.getRange(totalsRow, 9).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 1, 1, 9).setBorder(true, true, true, true, false, false, '#34a853', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // ========== NOTES SECTION ==========
   const notesRow = totalsRow + 2;
-  sheet.getRange(notesRow, 1, 1, 8).merge().setValue('📝 Notes / Special Instructions:').setFontWeight('bold').setBackground('#e8f0fe').setFontSize(11);
-  sheet.getRange(notesRow + 1, 1, 3, 8).merge()
+  sheet.getRange(notesRow, 1, 1, 9).merge().setValue('📝 Notes / Special Instructions:').setFontWeight('bold').setBackground('#e8f0fe').setFontSize(11);
+  sheet.getRange(notesRow + 1, 1, 3, 9).merge()
     .setValue(orderInfo.notes || '')
     .setWrap(true)
     .setVerticalAlignment('top')
@@ -892,10 +893,10 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   
   // ========== RECEIPT IMAGES SECTION ==========
   const receiptRow = notesRow + 5;
-  sheet.getRange(receiptRow, 1, 1, 8).merge().setValue('📸 Receipt Images - Upload or Paste Images Below').setFontWeight('bold').setBackground('#fff3cd').setFontSize(12).setHorizontalAlignment('center');
+  sheet.getRange(receiptRow, 1, 1, 9).merge().setValue('📸 Receipt Images - Upload or Paste Images Below').setFontWeight('bold').setBackground('#fff3cd').setFontSize(12).setHorizontalAlignment('center');
   
   // Large cell for receipt images with instructions
-  const receiptCell = sheet.getRange(receiptRow + 1, 1, 6, 8);
+  const receiptCell = sheet.getRange(receiptRow + 1, 1, 6, 9);
   receiptCell.merge()
     .setValue('📋 INSTRUCTIONS:\n\n' +
       '1. INSERT IMAGE: Right-click here → Insert → Image → Image in cell\n' +
@@ -914,11 +915,11 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   }
   
   // Border around receipt section with distinct color
-  sheet.getRange(receiptRow, 1, 7, 8).setBorder(true, true, true, true, true, true, '#f9ab00', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  sheet.getRange(receiptRow, 1, 7, 9).setBorder(true, true, true, true, true, true, '#f9ab00', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // ========== ACTIONS SECTION ==========
   const actionsRow = receiptRow + 8;
-  sheet.getRange(actionsRow, 1, 1, 8).merge().setValue('⚙️ Actions & Export').setFontWeight('bold').setFontSize(12).setBackground('#f8f9fa');
+  sheet.getRange(actionsRow, 1, 1, 9).merge().setValue('⚙️ Actions & Export').setFontWeight('bold').setFontSize(12).setBackground('#f8f9fa');
   
   sheet.getRange(actionsRow + 1, 1).setValue('Export Status:').setFontWeight('bold').setBackground('#ffffff');
   const exportCell = sheet.getRange(actionsRow + 1, 2, 1, 2);
@@ -926,16 +927,16 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   exportCell.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(EXPORT_CHOICES, true).build());
   
   sheet.getRange(actionsRow + 2, 1).setValue('Receipt Link:').setFontWeight('bold').setBackground('#ffffff');
-  sheet.getRange(actionsRow + 2, 2, 1, 6).merge().setBackground('#ffffff');
+  sheet.getRange(actionsRow + 2, 2, 1, 7).merge().setBackground('#ffffff');
   
   sheet.getRange(actionsRow + 3, 1).setValue('QB Export Link:').setFontWeight('bold').setBackground('#ffffff');
-  sheet.getRange(actionsRow + 3, 2, 1, 6).merge().setBackground('#ffffff');
+  sheet.getRange(actionsRow + 3, 2, 1, 7).merge().setBackground('#ffffff');
   
   // Border around actions section
-  sheet.getRange(actionsRow, 1, 4, 8).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
+  sheet.getRange(actionsRow, 1, 4, 9).setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // ========== TIP BOX ==========
-  sheet.getRange(actionsRow + 5, 1, 2, 8).merge()
+  sheet.getRange(actionsRow + 5, 1, 2, 9).merge()
     .setValue('💡 TIP: Fill in Base Cost (yellow column) as you source items. Total calculates automatically. Update Status dropdown as you progress. Set Export Status to "Ready" when complete.')
     .setWrap(true)
     .setBackground('#fff3cd')
@@ -948,17 +949,18 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   
   // Set column widths
   sheet.setColumnWidth(1, 110);  // Item Code
-  sheet.setColumnWidth(2, 200);  // Description
-  sheet.setColumnWidth(3, 100);  // Category
-  sheet.setColumnWidth(4, 70);   // Unit
-  sheet.setColumnWidth(5, 70);   // Qty
-  sheet.setColumnWidth(6, 100);  // Base Cost
-  sheet.setColumnWidth(7, 90);   // Markup
-  sheet.setColumnWidth(8, 110);  // Total
+  sheet.setColumnWidth(2, 180);  // Description
+  sheet.setColumnWidth(3, 200);  // Details (flavor, brand, etc)
+  sheet.setColumnWidth(4, 100);  // Category
+  sheet.setColumnWidth(5, 70);   // Unit
+  sheet.setColumnWidth(6, 70);   // Qty
+  sheet.setColumnWidth(7, 100);  // Base Cost
+  sheet.setColumnWidth(8, 90);   // Markup
+  sheet.setColumnWidth(9, 110);  // Total
   
   // Currency formatting
-  sheet.getRange('F10:F' + (currentRow - 1)).setNumberFormat('$#,##0.00');
-  sheet.getRange('H10:H' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('G10:G' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('I10:I' + (currentRow - 1)).setNumberFormat('$#,##0.00');
   
   // Freeze header rows
   sheet.setFrozenRows(9);
@@ -971,18 +973,18 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     sheet.hideRows(lastUsedRow + 1, maxRows - lastUsedRow);
   }
   
-  // Hide columns beyond H (except Z which holds metadata)
-  if (maxCols > 8) {
-    // Hide columns I through Y (9-25)
+  // Hide columns beyond I (except Z which holds metadata)
+  if (maxCols > 9) {
+    // Hide columns J through Y (10-25)
     if (maxCols >= 25) {
-      sheet.hideColumns(9, 17); // I-Y
-    } else if (maxCols > 8) {
-      sheet.hideColumns(9, maxCols - 8);
+      sheet.hideColumns(10, 16); // J-Y
+    } else if (maxCols > 9) {
+      sheet.hideColumns(10, maxCols - 9);
     }
   }
   
   // Add outer border around entire used area (creates table effect)
-  sheet.getRange(1, 1, lastUsedRow, 8).setBorder(true, true, true, true, null, null, '#1a73e8', SpreadsheetApp.BorderStyle.SOLID_THICK);
+  sheet.getRange(1, 1, lastUsedRow, 9).setBorder(true, true, true, true, null, null, '#1a73e8', SpreadsheetApp.BorderStyle.SOLID_THICK);
   
   // ========== METADATA (hidden in column Z) ==========
   sheet.getRange('Z1').setValue(orderInfo.docNumber);
@@ -1102,12 +1104,13 @@ function syncOrderToDataSheet(docNumber) {
     const itemCode = orderSheet.getRange(currentRow, 1).getValue();
     if (!itemCode) continue;
     
-    const category = orderSheet.getRange(currentRow, 3).getValue();
-    const unit = orderSheet.getRange(currentRow, 4).getValue();
-    const qty = orderSheet.getRange(currentRow, 5).getValue();
-    const baseCost = orderSheet.getRange(currentRow, 6).getValue();
-    const markup = orderSheet.getRange(currentRow, 7).getValue();
-    const amount = orderSheet.getRange(currentRow, 8).getValue();
+    const itemNotes = orderSheet.getRange(currentRow, 3).getValue(); // Item details/notes from customer
+    const category = orderSheet.getRange(currentRow, 4).getValue();
+    const unit = orderSheet.getRange(currentRow, 5).getValue();
+    const qty = orderSheet.getRange(currentRow, 6).getValue();
+    const baseCost = orderSheet.getRange(currentRow, 7).getValue();
+    const markup = orderSheet.getRange(currentRow, 8).getValue();
+    const amount = orderSheet.getRange(currentRow, 9).getValue();
     
     totalAmount += Number(amount || 0);
     itemCount++; // Count each item for THIS order
@@ -1131,7 +1134,7 @@ function syncOrderToDataSheet(docNumber) {
     row[idx['Rate']] = baseCost ? baseCost * (1 + markup / 100) : '';
     row[idx['Amount']] = amount;
     row[idx['TaxCode']] = 'NON';
-    row[idx['Notes']] = '';
+    row[idx['Notes']] = itemNotes || ''; // Store item-specific notes (flavor, brand, etc)
     row[idx['ExportStatus']] = exportStatus;
     row[idx['CreatedAt']] = now;
     
@@ -1219,11 +1222,15 @@ function onFormSubmit(e) {
       const qty = parseFloat(String(qtyStr).trim());
       if (!isFinite(qty) || qty <= 0) continue;
       
+      // Try to get item notes/details (if form has a field like "ITEM-CODE Details")
+      const itemNotesStr = first(named[itemCode + ' Details']) || first(named[itemCode + '_details']) || '';
+      
       items.push({
         itemCode: itemCode,
         category: allItems[i].category,
         unit: allItems[i].unit,
-        qty: qty
+        qty: qty,
+        itemNotes: itemNotesStr
       });
     }
     
@@ -1310,11 +1317,11 @@ function fixCircularReferenceInOrderSheets() {
       
       // Fix the formulas to exclude the totals row itself
       const sumRange = 'A10:A' + (totalsRow - 1);
-      const qtyRange = 'E10:E' + (totalsRow - 1);
-      const amountRange = 'H10:H' + (totalsRow - 1);
+      const qtyRange = 'F10:F' + (totalsRow - 1);
+      const amountRange = 'I10:I' + (totalsRow - 1);
       
-      sheet.getRange(totalsRow, 5).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
-      sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
+      sheet.getRange(totalsRow, 6).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
+      sheet.getRange(totalsRow, 9).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
       
       fixedCount++;
       
@@ -1710,8 +1717,8 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
       logAction('Sync', 'Sheet→Data: ExportStatus for ' + docNumber, 'Success');
     }
     
-    // Any item data changed (rows 10+, columns E=Qty, F=Base Cost, G=Markup%, H=Total)
-    if (row >= 10 && (col === 5 || col === 6 || col === 7 || col === 8)) {
+    // Any item data changed (rows 10+, columns C=Details, F=Qty, G=Base Cost, H=Markup%, I=Total)
+    if (row >= 10 && (col === 3 || col === 6 || col === 7 || col === 8 || col === 9)) {
       shouldSync = true;
       logAction('Sync', 'Sheet→Master: Item data updated for ' + docNumber, 'Info');
     }
@@ -1795,7 +1802,7 @@ function exportCurrentOrderSheet() {
   
   for (var row = 10; row <= lastItemRow; row++) {
     const itemCode = sheet.getRange(row, 1).getValue();
-    const baseCost = sheet.getRange(row, 6).getValue(); // Column F (Base Cost)
+    const baseCost = sheet.getRange(row, 7).getValue(); // Column G (Base Cost)
     if (itemCode && baseCost > 0) {
       hasCosts = true;
       break;
@@ -1803,7 +1810,7 @@ function exportCurrentOrderSheet() {
   }
   
   if (!hasCosts) {
-    SpreadsheetApp.getUi().alert('⚠️ Please fill in Base Cost (column F) for items before exporting.\n\nYou need to enter the actual cost you paid for each item.');
+    SpreadsheetApp.getUi().alert('⚠️ Please fill in Base Cost (column G) for items before exporting.\n\nYou need to enter the actual cost you paid for each item.');
     return;
   }
   
@@ -2537,7 +2544,9 @@ function doGet() {
 
 function getItemsForWebApp() {
   return DataLayer.getPriceBookItems().map(function(item) {
-    return { code: item.item, name: item.notes || item.item, category: item.category, unit: item.unit, price: item.basePrice };
+    // Calculate selling price: base price + markup
+    const sellingPrice = item.basePrice * (1 + (item.defaultMarkup / 100));
+    return { code: item.item, name: item.notes || item.item, category: item.category, unit: item.unit, price: sellingPrice };
   });
 }
 
@@ -2569,7 +2578,13 @@ function submitWebAppOrder(orderData) {
     const docNumber = DataLayer.getNextDocNumber(orderData.boatId);
     const items = (orderData.items || []).filter(it => it && it.code && Number(it.qty) > 0).map(function(item) {
       const priceItem = DataLayer.getPriceBookItem(item.code);
-      return { itemCode: item.code, category: priceItem ? priceItem.category : '', unit: priceItem ? priceItem.unit : 'ea', qty: Number(item.qty) };
+      return { 
+        itemCode: item.code, 
+        category: priceItem ? priceItem.category : '', 
+        unit: priceItem ? priceItem.unit : 'ea', 
+        qty: Number(item.qty),
+        itemNotes: item.description || '' // Capture item-specific notes (flavor, brand, etc)
+      };
     });
     
     if (items.length === 0) return { success: false, error: 'No valid items' };
