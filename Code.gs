@@ -355,7 +355,7 @@ function showClientHelp() {
     '1️⃣ View Orders\n' +
     '   • Menu > 📋 Order Master\n' +
     '   • Click "📄 Open Order" links to view details\n' +
-    '   • Fill in Base Cost (yellow column) as you shop\n' +
+    '   • Base Cost is pre-filled from pricebook - adjust if needed\n' +
     '   • Update Status as you progress\n\n' +
     '2️⃣ Upload Receipts\n' +
     '   • In order sheet, scroll to Receipt Images section\n' +
@@ -607,6 +607,11 @@ function initializeWorkbook() {
   setColumnWidths(price, 140);
   setColumnWidths(cust, 160);
   
+  // Format PIN column (column F, position 6) as plain text to preserve leading zeros
+  if (cust) {
+    cust.getRange(2, 6, cust.getMaxRows() - 1, 1).setNumberFormat('@STRING@');
+  }
+  
   applyListValidation(orderMaster, 2, 6, STATUS_CHOICES);
   
   // Convert key sheets to Tables for better data management
@@ -823,7 +828,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   sheet.getRange('A3:H7').setBorder(true, true, true, true, true, true, '#d9d9d9', SpreadsheetApp.BorderStyle.SOLID);
   
   // ========== ITEMS TABLE SECTION ==========
-  sheet.getRange('A8:I8').merge().setValue('📦 ORDER ITEMS - Fill in Base Cost as you source items');
+  sheet.getRange('A8:I8').merge().setValue('📦 ORDER ITEMS - Prices pre-filled | Use dropdown in Item Code to add more items');
   sheet.getRange('A8')
     .setFontSize(14)
     .setFontWeight('bold')
@@ -859,11 +864,40 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     sheet.getRange(currentRow, 4).setValue(item.category);
     sheet.getRange(currentRow, 5).setValue(item.unit);
     sheet.getRange(currentRow, 6).setValue(item.qty);
-    sheet.getRange(currentRow, 7).setValue('').setBackground('#fff3cd'); // Highlight for manual entry
+    // Pre-populate Base Cost from pricebook
+    sheet.getRange(currentRow, 7).setValue(priceItem ? priceItem.basePrice : '').setBackground('#fff3cd');
     sheet.getRange(currentRow, 8).setValue(priceItem ? priceItem.defaultMarkup : 15);
     sheet.getRange(currentRow, 9).setFormula('=IF(G' + currentRow + '>0, F' + currentRow + '*G' + currentRow + '*(1+H' + currentRow + '/100), "")');
     
     currentRow++;
+  }
+  
+  // Add 5 extra empty rows for manual item additions with formulas
+  const extraRows = 5;
+  for (var j = 0; j < extraRows; j++) {
+    const rowBg = ((currentRow - 10 + j) % 2 === 0) ? '#ffffff' : '#f1f8f4';
+    sheet.getRange(currentRow, 1, 1, 9).setBackground(rowBg);
+    // Leave columns A-F empty for manual entry
+    // Add formulas for columns G, H, I (will calculate when data entered)
+    sheet.getRange(currentRow, 7).setBackground('#fff3cd'); // Base Cost
+    sheet.getRange(currentRow, 8).setValue(15); // Default markup
+    sheet.getRange(currentRow, 9).setFormula('=IF(G' + currentRow + '>0, F' + currentRow + '*G' + currentRow + '*(1+H' + currentRow + '/100), "")');
+    currentRow++;
+  }
+  
+  // Add data validation for Item Code column (dropdown from pricebook)
+  // Use "List from a range" to avoid 500-item limit
+  const ss = SpreadsheetApp.getActive();
+  const priceSheet = ss.getSheetByName(SHEET.PRICEBOOK);
+  if (priceSheet && priceSheet.getLastRow() > 1) {
+    const itemCodeRange = sheet.getRange('A10:A' + (currentRow - 1));
+    // Reference column A (Item) in PriceBook sheet, starting from row 2 (skip header)
+    const priceBookItemRange = priceSheet.getRange('A2:A' + priceSheet.getLastRow());
+    const validation = SpreadsheetApp.newDataValidation()
+      .requireValueInRange(priceBookItemRange, true)
+      .setAllowInvalid(true)
+      .build();
+    itemCodeRange.setDataValidation(validation);
   }
   
   // Border around items table
@@ -937,7 +971,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   
   // ========== TIP BOX ==========
   sheet.getRange(actionsRow + 5, 1, 2, 9).merge()
-    .setValue('💡 TIP: Fill in Base Cost (yellow column) as you source items. Total calculates automatically. Update Status dropdown as you progress. Set Export Status to "Ready" when complete.')
+    .setValue('💡 TIP: To add items, use the dropdown in the Item Code column - all fields auto-fill! Base Cost (yellow) is pre-filled from pricebook - adjust if actual cost differs. Total calculates automatically. Update Status dropdown as you progress. Set Export Status to "Ready" when complete.')
     .setWrap(true)
     .setBackground('#fff3cd')
     .setVerticalAlignment('middle')
@@ -1012,13 +1046,16 @@ function addToOrderMaster(orderInfo, sheetName) {
   const sheetUrl = ss.getUrl() + '#gid=' + ss.getSheetByName(sheetName).getSheetId();
   const linkFormula = '=HYPERLINK("' + sheetUrl + '", "📄 Open Order")';
   
+  // Safely get items count with fallback
+  const itemsCount = (orderInfo.items && orderInfo.items.length) ? orderInfo.items.length : 0;
+  
   master.getRange(nextRow, 1).setValue(orderNum);
   master.getRange(nextRow, 2).setValue(orderInfo.docNumber);
   master.getRange(nextRow, 3).setValue(orderInfo.txnDate);
   master.getRange(nextRow, 4).setValue(orderInfo.boatId);
   master.getRange(nextRow, 5).setValue(orderInfo.boatName);
   master.getRange(nextRow, 6).setValue('Pending');
-  master.getRange(nextRow, 7).setValue(orderInfo.items.length);
+  master.getRange(nextRow, 7).setValue(itemsCount);
   master.getRange(nextRow, 8).setValue('');
   master.getRange(nextRow, 9).setValue('');
   master.getRange(nextRow, 10).setFormula(linkFormula);
@@ -1167,10 +1204,14 @@ function updateMasterIndex(docNumber, status, itemCount, total, assignedTo) {
       // Get order date from order sheet
       const orderDate = orderSheet ? orderSheet.getRange('H3').getValue() : data[i][2];
       
+      // Ensure itemCount is a valid number
+      const safeItemCount = (typeof itemCount === 'number' && !isNaN(itemCount)) ? itemCount : 0;
+      const safeTotal = (typeof total === 'number' && !isNaN(total)) ? total : 0;
+      
       master.getRange(row, 3).setValue(orderDate); // Date column
       master.getRange(row, 6).setValue(status); // Status column
-      master.getRange(row, 7).setValue(itemCount); // Items column
-      master.getRange(row, 8).setValue(total); // Total column
+      master.getRange(row, 7).setValue(safeItemCount); // Items column
+      master.getRange(row, 8).setValue(safeTotal); // Total column
       master.getRange(row, 9).setValue(assignedTo || ''); // Assigned To column
       master.getRange(row, 12).setValue(now); // Last Updated column
       break;
@@ -1448,6 +1489,10 @@ function addCustomerManually() {
   const custSheet = ss.getSheetByName(SHEET.CUSTOMERS);
   custSheet.appendRow([boatId, boatName, qbName, email, 'Net 7', pin]);
   
+  // Format the PIN cell (column F, position 6) as plain text to preserve leading zeros
+  const lastRow = custSheet.getLastRow();
+  custSheet.getRange(lastRow, 6).setNumberFormat('@STRING@');
+  
   CacheManager.clear();
   ui.alert('✅ Customer Added', 'BoatID: ' + boatId + '\nBoat: ' + boatName + '\nPIN: ' + pin, ui.ButtonSet.OK);
   logAction('CustomerAdd', 'Added ' + boatName, 'Success');
@@ -1545,6 +1590,8 @@ function seedSampleData() {
       ['B003', 'Boat Charlie', 'Boat Charlie Co', 'charlie@fleet.example', 'Net 7', '9012']
     ];
     cust.getRange(2, 1, boats.length, boats[0].length).setValues(boats);
+    // Format PIN column (column F, position 6) as plain text to preserve leading zeros
+    cust.getRange(2, 6, boats.length, 1).setNumberFormat('@STRING@');
   }
   
   if (price.getLastRow() < 2) {
@@ -1717,7 +1764,14 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
       logAction('Sync', 'Sheet→Data: ExportStatus for ' + docNumber, 'Success');
     }
     
-    // Any item data changed (rows 10+, columns C=Details, F=Qty, G=Base Cost, H=Markup%, I=Total)
+    // Item Code selected/changed (column A, row 10+) - Auto-populate from pricebook
+    if (row >= 10 && col === 1 && newValue) {
+      autoPopulateItemDetails(orderSheet, row, newValue);
+      shouldSync = true;
+      logAction('Sync', 'Sheet→Master: Item code selected for ' + docNumber, 'Info');
+    }
+    
+    // Any other item data changed (rows 10+, columns C=Details, F=Qty, G=Base Cost, H=Markup%, I=Total)
     if (row >= 10 && (col === 3 || col === 6 || col === 7 || col === 8 || col === 9)) {
       shouldSync = true;
       logAction('Sync', 'Sheet→Master: Item data updated for ' + docNumber, 'Info');
@@ -1753,6 +1807,45 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
     
   } catch (err) {
     logAction('SyncError', 'handleOrderSheetEdit: ' + String(err), 'Failed');
+  }
+}
+
+/******** AUTO-POPULATE ITEM DETAILS ********/
+/**
+ * When an item code is selected from the dropdown in an order sheet,
+ * automatically populate the description, category, unit, base cost, and markup
+ */
+function autoPopulateItemDetails(orderSheet, row, itemCode) {
+  try {
+    const priceItem = DataLayer.getPriceBookItem(itemCode);
+    if (!priceItem) return;
+    
+    // Column B: Description
+    orderSheet.getRange(row, 2).setValue(priceItem.notes || itemCode);
+    
+    // Column D: Category
+    orderSheet.getRange(row, 4).setValue(priceItem.category || '');
+    
+    // Column E: Unit
+    orderSheet.getRange(row, 5).setValue(priceItem.unit || 'ea');
+    
+    // Column G: Base Cost (only if empty, don't overwrite manual entries)
+    const currentBaseCost = orderSheet.getRange(row, 7).getValue();
+    if (!currentBaseCost) {
+      orderSheet.getRange(row, 7).setValue(priceItem.basePrice || '');
+    }
+    
+    // Column H: Markup % (only if empty or default 15)
+    const currentMarkup = orderSheet.getRange(row, 8).getValue();
+    if (!currentMarkup || currentMarkup === 15) {
+      orderSheet.getRange(row, 8).setValue(priceItem.defaultMarkup || 15);
+    }
+    
+    // Column I: Total formula already exists, will calculate automatically
+    
+    logAction('ItemAutoFill', 'Auto-populated details for ' + itemCode + ' in row ' + row, 'Success');
+  } catch (err) {
+    logAction('ItemAutoFillError', 'Failed to auto-populate: ' + String(err), 'Failed');
   }
 }
 
@@ -3031,7 +3124,7 @@ function getWebAppUrl() {
  *************************************************/
 // 1. Orders arrive → Hidden sheets created automatically
 // 2. View in Order Master → Click "📄 Open Order" links
-// 3. Fill in Base Cost (yellow column) as you shop
+// 3. Base Cost is pre-filled from pricebook - adjust if actual cost differs
 // 4. Upload receipt images in Receipt Images section
 // 5. Update Status dropdown (Pending → Shopping → Delivered)
 // 6. Changes sync instantly to Master & Dashboard

@@ -793,7 +793,6 @@
           <div class="dot"></div>
           <div class="dot"></div>
           <div class="dot"></div>
-          <div class="dot"></div>
         </div>
 
         <!-- Step 1: Boat -->
@@ -875,20 +874,6 @@
           </div>
           <div class="btn-group">
             <button class="btn btn-secondary" id="back6">← Back</button>
-            <button class="btn btn-primary" id="next6">Next →</button>
-          </div>
-        </div>
-
-        <!-- Step 7: Notes -->
-        <div class="step" data-step="7">
-          <h2 class="step-title">Special Instructions</h2>
-          <p class="step-desc">Any special requests?</p>
-          <div class="field">
-            <label for="notes">Special Instructions</label>
-            <textarea id="notes" placeholder="Ice down drinks, leave with deckhand, etc."></textarea>
-          </div>
-          <div class="btn-group">
-            <button class="btn btn-secondary" id="back7">← Back</button>
             <button class="btn btn-primary" id="startShopping">Start Shopping →</button>
           </div>
         </div>
@@ -940,6 +925,13 @@
         </div>
       </div>
 
+      <div class="card">
+        <div class="field">
+          <label for="notes">Special Instructions</label>
+          <textarea id="notes" placeholder="Ice down drinks, leave with deckhand, etc." style="font-size: 1.125rem;"></textarea>
+        </div>
+      </div>
+
       <button class="btn btn-primary" id="submitBtn">Submit Order</button>
     </div>
   </div>
@@ -956,7 +948,7 @@
     let categories = {};
     const cart = {};
     let currentStep = 1;
-    const info = {boat:'', pin:'', email:'', phone:'', po:'', location:'', notes:''};
+    const info = {boat:'', pin:'', email:'', phone:'', po:'', location:''};
 
     // Helpers
     const $ = id => document.getElementById(id);
@@ -1063,17 +1055,10 @@
 
     // Step 6
     $('back6').addEventListener('click', () => showStep(5));
-    $('next6').addEventListener('click', () => {
-      info.location = $('location').value;
-      showStep(7);
-    });
-
-    // Step 7
-    $('back7').addEventListener('click', () => showStep(6));
     $('startShopping').addEventListener('click', startShopping);
 
     function startShopping() {
-      info.notes = $('notes').value;
+      info.location = $('location').value;
       $('infoScreen').style.display = 'none';
       $('shopScreen').style.display = 'block';
       $('dock').classList.add('show');
@@ -1278,7 +1263,6 @@
         <div class="info-item"><strong>Phone:</strong><span>${esc(info.phone)||'—'}</span></div>
         <div class="info-item"><strong>PO Number:</strong><span>${esc(info.po)||'—'}</span></div>
         <div class="info-item"><strong>Location:</strong><span>${esc(info.location)||'—'}</span></div>
-        ${info.notes?`<div class="info-item" style="grid-column:1/-1"><strong>Notes:</strong><span>${esc(info.notes)}</span></div>`:''}
       `;
       $('infoReview').innerHTML = infoHTML;
       
@@ -1329,6 +1313,9 @@
       btn.disabled = true;
       btn.textContent = 'Submitting...';
       
+      // Get special instructions from the modal textarea
+      const notes = $('notes').value;
+      
       const orderItems = Object.entries(cart).map(([code, itemData]) => ({
         code, 
         qty: itemData.qty, 
@@ -1358,7 +1345,7 @@
           phone: info.phone,
           po: info.po,
           deliveryLocation: info.location,
-          notes: info.notes,
+          notes: notes,
           items: orderItems
         });
     });
