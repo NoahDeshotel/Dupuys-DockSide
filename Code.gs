@@ -213,6 +213,8 @@ function buildClientMenu() {
     .addSeparator()
     .addItem('📋 Order Master', 'openOrderMaster')
     .addSeparator()
+    .addItem('🔤 Sort Current Order by Category', 'sortOrderByCategory')
+    .addSeparator()
     .addSubMenu(ui.createMenu('💰 QuickBooks')
       .addItem('📄 Export Current Order', 'exportCurrentOrderSheet')
       .addItem('📄 Export Ready Batch', 'exportReadyBatch')
@@ -321,6 +323,8 @@ function buildAdminMenu() {
     .addSeparator()
     .addSubMenu(ui.createMenu('📊 Views')
       .addItem('📋 Order Master Index', 'openOrderMaster')
+      .addSeparator()
+      .addItem('🔤 Sort Current Order by Category', 'sortOrderByCategory')
       .addSeparator()
       .addItem('👁️ Show All Order Sheets', 'showAllOrderSheets')
       .addItem('🙈 Hide All Order Sheets', 'hideAllOrderSheets')
@@ -837,7 +841,7 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     .setVerticalAlignment('middle')
     .setHorizontalAlignment('center');
   
-  const itemHeaders = ['Item Code', 'Description', 'Details (flavor, brand, etc)', 'Category', 'Unit', 'Qty', 'Base Cost', 'Markup %', 'Total'];
+  const itemHeaders = ['Item Code', 'Qty', 'Description', 'Unit', 'Details (flavor, brand, etc)', 'Base Cost', 'Markup %', 'Total', 'Category'];
   sheet.getRange('A9:I9')
     .setValues([itemHeaders])
     .setFontWeight('bold')
@@ -859,15 +863,15 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
     sheet.getRange(currentRow, 1, 1, 9).setBackground(rowBg);
     
     sheet.getRange(currentRow, 1).setValue(item.itemCode);
-    sheet.getRange(currentRow, 2).setValue(priceItem ? priceItem.notes : item.itemCode);
-    sheet.getRange(currentRow, 3).setValue(item.itemNotes || '').setFontStyle('italic').setFontColor('#5f6368'); // Item-specific notes from customer
-    sheet.getRange(currentRow, 4).setValue(item.category);
-    sheet.getRange(currentRow, 5).setValue(item.unit);
-    sheet.getRange(currentRow, 6).setValue(item.qty);
+    sheet.getRange(currentRow, 2).setValue(item.qty);
+    sheet.getRange(currentRow, 3).setValue(priceItem ? priceItem.notes : item.itemCode);
+    sheet.getRange(currentRow, 4).setValue(item.unit);
+    sheet.getRange(currentRow, 5).setValue(item.itemNotes || '').setFontStyle('italic').setFontColor('#5f6368'); // Item-specific notes from customer
     // Pre-populate Base Cost from pricebook
-    sheet.getRange(currentRow, 7).setValue(priceItem ? priceItem.basePrice : '').setBackground('#fff3cd');
-    sheet.getRange(currentRow, 8).setValue(priceItem ? priceItem.defaultMarkup : 15);
-    sheet.getRange(currentRow, 9).setFormula('=IF(G' + currentRow + '>0, F' + currentRow + '*G' + currentRow + '*(1+H' + currentRow + '/100), "")');
+    sheet.getRange(currentRow, 6).setValue(priceItem ? priceItem.basePrice : '').setBackground('#fff3cd');
+    sheet.getRange(currentRow, 7).setValue(priceItem ? priceItem.defaultMarkup : 15);
+    sheet.getRange(currentRow, 8).setFormula('=IF(F' + currentRow + '>0, B' + currentRow + '*F' + currentRow + '*(1+G' + currentRow + '/100), "")');
+    sheet.getRange(currentRow, 9).setValue(item.category);
     
     currentRow++;
   }
@@ -877,11 +881,11 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   for (var j = 0; j < extraRows; j++) {
     const rowBg = ((currentRow - 10 + j) % 2 === 0) ? '#ffffff' : '#f1f8f4';
     sheet.getRange(currentRow, 1, 1, 9).setBackground(rowBg);
-    // Leave columns A-F empty for manual entry
-    // Add formulas for columns G, H, I (will calculate when data entered)
-    sheet.getRange(currentRow, 7).setBackground('#fff3cd'); // Base Cost
-    sheet.getRange(currentRow, 8).setValue(15); // Default markup
-    sheet.getRange(currentRow, 9).setFormula('=IF(G' + currentRow + '>0, F' + currentRow + '*G' + currentRow + '*(1+H' + currentRow + '/100), "")');
+    // Leave columns A-E empty for manual entry
+    // Add formulas for columns F, G, H (will calculate when data entered)
+    sheet.getRange(currentRow, 6).setBackground('#fff3cd'); // Base Cost
+    sheet.getRange(currentRow, 7).setValue(15); // Default markup
+    sheet.getRange(currentRow, 8).setFormula('=IF(F' + currentRow + '>0, B' + currentRow + '*F' + currentRow + '*(1+G' + currentRow + '/100), "")');
     currentRow++;
   }
   
@@ -905,14 +909,14 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   
   // Totals row with strong styling (using dynamic formulas that adapt to added rows)
   const totalsRow = currentRow + 1;
-  sheet.getRange(totalsRow, 1, 1, 5).merge().setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 1, 1, 1).setValue('💰 TOTAL:').setFontWeight('bold').setFontSize(12).setHorizontalAlignment('right').setBackground('#34a853').setFontColor('white');
   // Use SUMIF to dynamically sum all non-empty rows BEFORE the totals row (avoiding circular reference)
   const sumRange = 'A10:A' + (totalsRow - 1);
-  const qtyRange = 'F10:F' + (totalsRow - 1);
-  const amountRange = 'I10:I' + (totalsRow - 1);
-  sheet.getRange(totalsRow, 6).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
-  sheet.getRange(totalsRow, 7, 1, 2).merge().setBackground('#34a853');
-  sheet.getRange(totalsRow, 9).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
+  const qtyRange = 'B10:B' + (totalsRow - 1);
+  const amountRange = 'H10:H' + (totalsRow - 1);
+  sheet.getRange(totalsRow, 2).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(totalsRow, 3, 1, 5).merge().setBackground('#34a853');
+  sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')').setFontWeight('bold').setFontSize(12).setNumberFormat('$#,##0.00').setBackground('#34a853').setFontColor('white');
   sheet.getRange(totalsRow, 1, 1, 9).setBorder(true, true, true, true, false, false, '#34a853', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   
   // ========== NOTES SECTION ==========
@@ -983,18 +987,18 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   
   // Set column widths
   sheet.setColumnWidth(1, 110);  // Item Code
-  sheet.setColumnWidth(2, 180);  // Description
-  sheet.setColumnWidth(3, 200);  // Details (flavor, brand, etc)
-  sheet.setColumnWidth(4, 100);  // Category
-  sheet.setColumnWidth(5, 70);   // Unit
-  sheet.setColumnWidth(6, 70);   // Qty
-  sheet.setColumnWidth(7, 100);  // Base Cost
-  sheet.setColumnWidth(8, 90);   // Markup
-  sheet.setColumnWidth(9, 110);  // Total
+  sheet.setColumnWidth(2, 70);   // Qty
+  sheet.setColumnWidth(3, 180);  // Description
+  sheet.setColumnWidth(4, 70);   // Unit
+  sheet.setColumnWidth(5, 200);  // Details (flavor, brand, etc)
+  sheet.setColumnWidth(6, 100);  // Base Cost
+  sheet.setColumnWidth(7, 90);   // Markup
+  sheet.setColumnWidth(8, 110);  // Total
+  sheet.setColumnWidth(9, 100);  // Category
   
   // Currency formatting
-  sheet.getRange('G10:G' + (currentRow - 1)).setNumberFormat('$#,##0.00');
-  sheet.getRange('I10:I' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('F10:F' + (currentRow - 1)).setNumberFormat('$#,##0.00');
+  sheet.getRange('H10:H' + (currentRow - 1)).setNumberFormat('$#,##0.00');
   
   // Freeze header rows
   sheet.setFrozenRows(9);
@@ -1141,13 +1145,13 @@ function syncOrderToDataSheet(docNumber) {
     const itemCode = orderSheet.getRange(currentRow, 1).getValue();
     if (!itemCode) continue;
     
-    const itemNotes = orderSheet.getRange(currentRow, 3).getValue(); // Item details/notes from customer
-    const category = orderSheet.getRange(currentRow, 4).getValue();
-    const unit = orderSheet.getRange(currentRow, 5).getValue();
-    const qty = orderSheet.getRange(currentRow, 6).getValue();
-    const baseCost = orderSheet.getRange(currentRow, 7).getValue();
-    const markup = orderSheet.getRange(currentRow, 8).getValue();
-    const amount = orderSheet.getRange(currentRow, 9).getValue();
+    const qty = orderSheet.getRange(currentRow, 2).getValue();
+    const unit = orderSheet.getRange(currentRow, 4).getValue();
+    const itemNotes = orderSheet.getRange(currentRow, 5).getValue(); // Item details/notes from customer
+    const baseCost = orderSheet.getRange(currentRow, 6).getValue();
+    const markup = orderSheet.getRange(currentRow, 7).getValue();
+    const amount = orderSheet.getRange(currentRow, 8).getValue();
+    const category = orderSheet.getRange(currentRow, 9).getValue();
     
     totalAmount += Number(amount || 0);
     itemCount++; // Count each item for THIS order
@@ -1358,11 +1362,11 @@ function fixCircularReferenceInOrderSheets() {
       
       // Fix the formulas to exclude the totals row itself
       const sumRange = 'A10:A' + (totalsRow - 1);
-      const qtyRange = 'F10:F' + (totalsRow - 1);
-      const amountRange = 'I10:I' + (totalsRow - 1);
+      const qtyRange = 'B10:B' + (totalsRow - 1);
+      const amountRange = 'H10:H' + (totalsRow - 1);
       
-      sheet.getRange(totalsRow, 6).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
-      sheet.getRange(totalsRow, 9).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
+      sheet.getRange(totalsRow, 2).setFormula('=SUMIF(' + sumRange + ',"<>",' + qtyRange + ')');
+      sheet.getRange(totalsRow, 8).setFormula('=SUMIF(' + sumRange + ',"<>",' + amountRange + ')');
       
       fixedCount++;
       
@@ -1653,7 +1657,7 @@ function installOnEditTrigger() {
  *   - H4 (Phone) → syncs to _OrderData
  *   - H5 (PO Number) → syncs to _OrderData
  *   - F (Base Cost) → recalculates total, syncs to _OrderData
- *   - E (Qty) → recalculates total, syncs to _OrderData
+ *   - B (Qty) → recalculates total, syncs to _OrderData
  *   - G (Markup%) → recalculates total, syncs to _OrderData
  *   - Export Status → syncs to _OrderData
  * 
@@ -1771,8 +1775,8 @@ function handleOrderSheetEdit(orderSheet, sheetName, row, col, newValue) {
       logAction('Sync', 'Sheet→Master: Item code selected for ' + docNumber, 'Info');
     }
     
-    // Any other item data changed (rows 10+, columns C=Details, F=Qty, G=Base Cost, H=Markup%, I=Total)
-    if (row >= 10 && (col === 3 || col === 6 || col === 7 || col === 8 || col === 9)) {
+    // Any other item data changed (rows 10+, columns B=Qty, C=Description, D=Unit, E=Details, F=Base Cost, G=Markup%, H=Total, I=Category)
+    if (row >= 10 && (col === 2 || col === 3 || col === 4 || col === 5 || col === 6 || col === 7 || col === 8 || col === 9)) {
       shouldSync = true;
       logAction('Sync', 'Sheet→Master: Item data updated for ' + docNumber, 'Info');
     }
@@ -1820,28 +1824,28 @@ function autoPopulateItemDetails(orderSheet, row, itemCode) {
     const priceItem = DataLayer.getPriceBookItem(itemCode);
     if (!priceItem) return;
     
-    // Column B: Description
-    orderSheet.getRange(row, 2).setValue(priceItem.notes || itemCode);
+    // Column C: Description
+    orderSheet.getRange(row, 3).setValue(priceItem.notes || itemCode);
     
-    // Column D: Category
-    orderSheet.getRange(row, 4).setValue(priceItem.category || '');
+    // Column D: Unit
+    orderSheet.getRange(row, 4).setValue(priceItem.unit || 'ea');
     
-    // Column E: Unit
-    orderSheet.getRange(row, 5).setValue(priceItem.unit || 'ea');
+    // Column I: Category
+    orderSheet.getRange(row, 9).setValue(priceItem.category || '');
     
-    // Column G: Base Cost (only if empty, don't overwrite manual entries)
-    const currentBaseCost = orderSheet.getRange(row, 7).getValue();
+    // Column F: Base Cost (only if empty, don't overwrite manual entries)
+    const currentBaseCost = orderSheet.getRange(row, 6).getValue();
     if (!currentBaseCost) {
-      orderSheet.getRange(row, 7).setValue(priceItem.basePrice || '');
+      orderSheet.getRange(row, 6).setValue(priceItem.basePrice || '');
     }
     
-    // Column H: Markup % (only if empty or default 15)
-    const currentMarkup = orderSheet.getRange(row, 8).getValue();
+    // Column G: Markup % (only if empty or default 15)
+    const currentMarkup = orderSheet.getRange(row, 7).getValue();
     if (!currentMarkup || currentMarkup === 15) {
-      orderSheet.getRange(row, 8).setValue(priceItem.defaultMarkup || 15);
+      orderSheet.getRange(row, 7).setValue(priceItem.defaultMarkup || 15);
     }
     
-    // Column I: Total formula already exists, will calculate automatically
+    // Column H: Total formula already exists, will calculate automatically
     
     logAction('ItemAutoFill', 'Auto-populated details for ' + itemCode + ' in row ' + row, 'Success');
   } catch (err) {
@@ -1872,6 +1876,54 @@ function updateMasterField(masterSheet, docNumber, fieldName, value) {
   }
 }
 
+/******** SORT ORDER BY CATEGORY ********/
+function sortOrderByCategory() {
+  const ss = SpreadsheetApp.getActive();
+  const sheet = ss.getActiveSheet();
+  const sheetName = sheet.getName();
+  
+  // Check if we're on an order sheet
+  if (sheetName.indexOf(ORDER_SHEET_PREFIX) !== 0) {
+    SpreadsheetApp.getUi().alert('⚠️ Please open an order sheet first (ORDER_TB-...)');
+    return;
+  }
+  
+  try {
+    // Calculate dynamic positions based on current sheet content
+    const positions = calculateOrderSheetPositions(sheet);
+    const lastItemRow = positions.lastItemRow;
+    
+    // Count how many items we have
+    let itemCount = 0;
+    for (var row = 10; row <= lastItemRow; row++) {
+      const itemCode = sheet.getRange(row, 1).getValue();
+      if (itemCode) {
+        itemCount++;
+      }
+    }
+    
+    if (itemCount === 0) {
+      SpreadsheetApp.getUi().alert('ℹ️ No items to sort in this order.');
+      return;
+    }
+    
+    // The items are in rows 10 to lastItemRow, columns A (1) to I (9)
+    // Category is now in column I (9)
+    const itemsRange = sheet.getRange(10, 1, lastItemRow - 9, 9);
+    
+    // Sort by column 9 (Category) within the range
+    // The 9th column in our range (A-I) is column I (Category)
+    itemsRange.sort(9);
+    
+    SpreadsheetApp.getUi().alert('✅ Order sorted by category!\n\n' + itemCount + ' items have been grouped by category.');
+    
+    logAction('SortOrder', 'Sorted order ' + sheetName + ' by category', 'Success');
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('❌ Error sorting order:\n\n' + String(err) + '\n\nPlease contact support if this continues.');
+    logAction('SortOrderError', 'Failed to sort: ' + String(err), 'Failed');
+  }
+}
+
 /******** EXPORT CURRENT ORDER SHEET ********/
 function exportCurrentOrderSheet() {
   requireLicense();
@@ -1895,7 +1947,7 @@ function exportCurrentOrderSheet() {
   
   for (var row = 10; row <= lastItemRow; row++) {
     const itemCode = sheet.getRange(row, 1).getValue();
-    const baseCost = sheet.getRange(row, 7).getValue(); // Column G (Base Cost)
+    const baseCost = sheet.getRange(row, 6).getValue(); // Column F (Base Cost)
     if (itemCode && baseCost > 0) {
       hasCosts = true;
       break;
@@ -1903,7 +1955,7 @@ function exportCurrentOrderSheet() {
   }
   
   if (!hasCosts) {
-    SpreadsheetApp.getUi().alert('⚠️ Please fill in Base Cost (column G) for items before exporting.\n\nYou need to enter the actual cost you paid for each item.');
+    SpreadsheetApp.getUi().alert('⚠️ Please fill in Base Cost (column F) for items before exporting.\n\nYou need to enter the actual cost you paid for each item.');
     return;
   }
   
