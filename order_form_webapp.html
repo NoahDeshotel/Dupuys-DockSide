@@ -27,28 +27,46 @@
       --shadow: 0 2px 8px rgba(0,0,0,0.1);
       --shadow-lg: 0 4px 16px rgba(0,0,0,0.15);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
+      
+      /* Dynamic responsive spacing */
+      --header-height: auto;
+      --dock-height: auto;
+      --spacing-xs: clamp(0.25rem, 1vw, 0.5rem);
+      --spacing-sm: clamp(0.5rem, 2vw, 1rem);
+      --spacing-md: clamp(0.75rem, 3vw, 1.5rem);
+      --spacing-lg: clamp(1rem, 4vw, 2rem);
+      --spacing-xl: clamp(1.5rem, 5vw, 3rem);
+      
+      /* Dynamic font sizes */
+      --font-xs: clamp(0.75rem, 2vw, 0.875rem);
+      --font-sm: clamp(0.875rem, 2.5vw, 1rem);
+      --font-base: clamp(1rem, 3vw, 1.1rem);
+      --font-lg: clamp(1.1rem, 3.5vw, 1.3rem);
+      --font-xl: clamp(1.2rem, 4vw, 1.5rem);
+      --font-2xl: clamp(1.3rem, 5vw, 2rem);
     }
 
     html {
-      font-size: 18px; /* Increased from 16px for better mobile readability */
+      font-size: clamp(16px, 2.5vw, 18px); /* Responsive base font size */
       -webkit-text-size-adjust: 100%;
       -webkit-font-smoothing: antialiased;
     }
 
     body {
       min-height: 100vh;
+      min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
       background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 50%, #ffffff 100%);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       line-height: 1.5;
       overflow-x: hidden;
-      padding-bottom: calc(120px + var(--safe-bottom));
+      padding-bottom: clamp(2rem, 8vh, 4rem); /* Much less padding needed for floating icon */
     }
 
     /* Header */
     header {
       text-align: center;
-      padding: 0.75rem 1rem;
+      padding: var(--spacing-sm) var(--spacing-md);
       background: rgba(255, 255, 255, 0.95);
       backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
@@ -59,26 +77,27 @@
     }
 
     h1 {
-      font-size: 1.4rem;
+      font-size: var(--font-xl);
       font-weight: 900;
       background: linear-gradient(135deg, #2563eb, #3b82f6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 0.15rem;
-      line-height: 1.2;
+      margin-bottom: 0.1rem;
+      line-height: 1.1;
     }
 
     .subtitle {
-      font-size: 0.9rem;
+      font-size: var(--font-xs);
       color: var(--text);
-      opacity: 0.7;
+      opacity: 0.65;
     }
 
     /* Container */
     main {
-      padding: 0.75rem;
+      padding: var(--spacing-sm);
       max-width: 100%;
+      width: 100%;
     }
 
     /* Cards */
@@ -86,9 +105,9 @@
       background: var(--card);
       backdrop-filter: blur(20px);
       border: 1px solid var(--border);
-      border-radius: 1rem;
-      padding: 1.25rem 1rem;
-      margin: 0.75rem 0;
+      border-radius: clamp(0.75rem, 2vw, 1rem);
+      padding: var(--spacing-md) var(--spacing-sm);
+      margin: var(--spacing-sm) 0;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
     }
 
@@ -96,8 +115,8 @@
     .progress-dots {
       display: flex;
       justify-content: center;
-      gap: 0.625rem;
-      margin-bottom: 1.25rem;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
     }
 
     .dot {
@@ -134,44 +153,44 @@
     }
 
     .step-title {
-      font-size: 1.5rem;
+      font-size: var(--font-xl);
       font-weight: 900;
       background: linear-gradient(135deg, #2563eb, #3b82f6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
-      margin-bottom: 0.75rem;
+      margin-bottom: var(--spacing-sm);
       line-height: 1.2;
     }
 
     .step-desc {
-      font-size: 1.25rem;
+      font-size: var(--font-base);
       color: var(--text);
       opacity: 0.6;
-      margin-bottom: 2.5rem;
-      line-height: 1.6;
+      margin-bottom: var(--spacing-lg);
+      line-height: 1.5;
     }
 
     /* Form Elements */
     label {
       display: block;
-      font-size: 1.25rem;
+      font-size: var(--font-base);
       font-weight: 700;
       color: var(--text);
-      margin-bottom: 0.75rem;
+      margin-bottom: var(--spacing-sm);
     }
 
     input, select, textarea {
       width: 100%;
-      padding: 1.25rem 1.125rem;
-      font-size: 1.25rem;
+      padding: var(--spacing-md) var(--spacing-md);
+      font-size: var(--font-base);
       border: 1px solid var(--border);
-      border-radius: 0.75rem;
+      border-radius: clamp(0.5rem, 1.5vw, 0.75rem);
       background: #ffffff;
       color: var(--text);
       font-family: inherit;
       transition: all 0.2s;
-      min-height: 3.5rem; /* Ensure minimum touch target size */
+      min-height: clamp(3rem, 8vw, 3.5rem); /* Dynamic touch target */
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
@@ -192,28 +211,28 @@
     }
 
     textarea {
-      min-height: 8.75rem;
+      min-height: clamp(5rem, 15vh, 8rem); /* Dynamic based on viewport height */
       resize: vertical;
     }
 
     .field {
-      margin-bottom: 2rem;
+      margin-bottom: var(--spacing-lg);
     }
 
     /* Buttons */
     .btn {
       width: 100%;
-      padding: 1.25rem 1.75rem;
-      font-size: 1.25rem;
+      padding: var(--spacing-md) var(--spacing-lg);
+      font-size: var(--font-base);
       font-weight: 700;
       border: 2px solid var(--border);
-      border-radius: 0.75rem;
+      border-radius: clamp(0.5rem, 1.5vw, 0.75rem);
       background: transparent;
       color: var(--text);
       cursor: pointer;
       transition: all 0.2s;
       font-family: inherit;
-      min-height: 3.75rem; /* Ensure minimum touch target size */
+      min-height: clamp(3rem, 8vw, 3.5rem); /* Dynamic touch target */
       display: flex;
       align-items: center;
       justify-content: center;
@@ -265,8 +284,8 @@
 
     .btn-group {
       display: flex;
-      gap: 1rem;
-      margin-top: 2.5rem;
+      gap: var(--spacing-md);
+      margin-top: var(--spacing-lg);
     }
 
     .btn-group .btn {
@@ -276,7 +295,7 @@
     /* Shopping - Search */
     .search-box {
       position: relative;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
 
     .search-box input {
@@ -296,10 +315,10 @@
     /* Categories */
     .categories {
       display: flex;
-      gap: 0.75rem;
+      gap: var(--spacing-sm);
       overflow-x: auto;
-      padding: 1rem 0;
-      margin-bottom: 1.25rem;
+      padding: var(--spacing-sm) 0;
+      margin-bottom: var(--spacing-md);
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
     }
@@ -310,8 +329,8 @@
 
     .cat-btn {
       flex-shrink: 0;
-      padding: 1rem 1.5rem;
-      font-size: 1.125rem;
+      padding: var(--spacing-sm) var(--spacing-md);
+      font-size: var(--font-sm);
       font-weight: 700;
       border: 2px solid var(--border);
       border-radius: 2rem;
@@ -320,7 +339,7 @@
       white-space: nowrap;
       cursor: pointer;
       transition: all 0.2s;
-      min-height: 3rem;
+      min-height: clamp(2.5rem, 7vw, 3rem);
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
     }
 
@@ -339,12 +358,12 @@
 
     /* Items */
     .section-title {
-      font-size: 1.25rem;
+      font-size: var(--font-base);
       font-weight: 800;
       background: rgba(37, 99, 235, 0.05);
-      padding: 1.125rem 1.5rem;
-      border-radius: 0.75rem;
-      margin: 1.5rem 0 1.25rem;
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: clamp(0.5rem, 1.5vw, 0.75rem);
+      margin: var(--spacing-md) 0 var(--spacing-sm);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -354,14 +373,14 @@
     .items {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: var(--spacing-sm);
     }
 
     .item {
       border: 2px solid var(--border);
-      border-radius: 0.75rem;
+      border-radius: clamp(0.5rem, 1.5vw, 0.75rem);
       background: rgba(255, 255, 255, 0.9);
-      padding: 1rem;
+      padding: var(--spacing-sm);
       transition: all 0.2s;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
@@ -384,21 +403,22 @@
     }
 
     .item-name {
-      font-size: 1.1rem;
+      font-size: var(--font-base);
       font-weight: 900;
-      margin-bottom: 0.5rem;
+      margin-bottom: var(--spacing-xs);
       line-height: 1.3;
     }
 
     .item-info {
       display: flex;
       justify-content: space-between;
-      font-size: 0.95rem;
+      font-size: var(--font-sm);
       color: var(--text);
       opacity: 0.7;
-      margin-bottom: 0.75rem;
+      margin-bottom: var(--spacing-sm);
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: var(--spacing-xs);
+    }
     }
 
     .price {
@@ -453,58 +473,104 @@
       min-height: 4rem;
     }
 
-    /* Dock (Cart) */
+    /* Dock (Cart) - Now a floating circular icon */
     .dock {
       position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      background: rgba(255, 255, 255, 0.98);
+      bottom: calc(var(--spacing-lg) + var(--safe-bottom));
+      right: var(--spacing-lg);
+      background: var(--accent);
       backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border);
-      padding: 0.75rem 1rem;
-      padding-bottom: calc(0.75rem + var(--safe-bottom));
+      border: 3px solid rgba(255, 255, 255, 0.9);
+      padding: 0;
       z-index: 20;
       display: none;
-      flex-direction: column;
+      width: clamp(3.5rem, 12vw, 4.5rem);
+      height: clamp(3.5rem, 12vw, 4.5rem);
+      min-width: clamp(3.5rem, 12vw, 4.5rem);
+      max-width: clamp(3.5rem, 12vw, 4.5rem);
+      min-height: clamp(3.5rem, 12vw, 4.5rem);
+      max-height: clamp(3.5rem, 12vw, 4.5rem);
+      border-radius: 50%;
       align-items: center;
-      box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.15);
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+      cursor: pointer;
+      transition: all 0.3s ease;
     }
 
     .dock.show {
       display: flex;
     }
+    
+    @keyframes cartPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+    
+    .dock.pulse {
+      animation: cartPulse 0.4s ease-in-out;
+    }
+    
+    .dock:hover {
+      transform: scale(1.1);
+      box-shadow: 0 12px 32px rgba(37, 99, 235, 0.5), 0 6px 16px rgba(0, 0, 0, 0.25);
+    }
+    
+    .dock:active {
+      transform: scale(0.95);
+    }
 
     .cart-info {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.75rem;
-      margin-bottom: 0.75rem;
-      width: 100%;
-      min-height: 2.5rem;
+      display: none !important;
+      width: 0;
+      height: 0;
+      overflow: hidden;
     }
 
     .badge {
-      width: 2.5rem;
-      height: 2.5rem;
+      position: absolute;
+      top: -0.5rem;
+      right: -0.5rem;
+      width: clamp(1.75rem, 6vw, 2.25rem);
+      height: clamp(1.75rem, 6vw, 2.25rem);
+      min-width: clamp(1.75rem, 6vw, 2.25rem);
+      max-width: clamp(1.75rem, 6vw, 2.25rem);
+      min-height: clamp(1.75rem, 6vw, 2.25rem);
+      max-height: clamp(1.75rem, 6vw, 2.25rem);
       border-radius: 50%;
-      background: var(--accent);
+      background: #ef4444;
       color: #fff;
       font-weight: 900;
-      font-size: 1.2rem;
+      font-size: clamp(0.75rem, 2.5vw, 0.95rem);
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+      box-shadow: 0 3px 10px rgba(239, 68, 68, 0.6);
+      border: 3px solid white;
+      pointer-events: none;
+      z-index: 21;
     }
 
     .cart-summary {
-      font-size: 1rem;
-      font-weight: 800;
-      text-align: center;
-      line-height: 1.3;
+      display: none !important;
+      width: 0;
+      height: 0;
+    }
+    
+    .cart-icon {
+      font-size: clamp(1.5rem, 5vw, 2rem);
+      line-height: 1;
+      pointer-events: none;
+      flex-shrink: 0;
+    }
+    
+    .dock .btn {
+      display: none !important;
+      width: 0;
+      height: 0;
+      position: absolute;
+      visibility: hidden;
     }
     
     .dock .btn {
@@ -520,42 +586,51 @@
       backdrop-filter: blur(10px);
       z-index: 100;
       display: none !important;
-      overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
 
     .modal.show {
-      display: block !important;
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
     }
 
     .modal-content {
       background: #ffffff;
-      padding: 1.75rem 1.5rem;
-      padding-bottom: calc(1.75rem + var(--safe-bottom));
       position: relative;
-      min-height: 100vh;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      max-height: 100vh;
     }
 
     .modal-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 1.75rem;
       gap: 1rem;
+      padding: var(--spacing-lg) var(--spacing-md);
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
     .modal-header h2 {
-      font-size: 2rem;
+      font-size: var(--font-xl);
       font-weight: 900;
       line-height: 1.2;
     }
 
     .close-btn {
-      width: 3.75rem;
-      height: 3.75rem;
-      font-size: 2.25rem;
+      width: clamp(2.75rem, 8vw, 3.25rem);
+      height: clamp(2.75rem, 8vw, 3.25rem);
+      font-size: var(--font-xl);
       border: 2px solid var(--border);
-      border-radius: 0.75rem;
+      border-radius: clamp(0.5rem, 1.5vw, 0.75rem);
       background: transparent;
       color: var(--text);
       display: flex;
@@ -575,13 +650,42 @@
       transform: scale(1.05);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
+    
+    /* Modal body - scrollable content */
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: var(--spacing-md);
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Modal footer - sticky at bottom */
+    .modal-footer {
+      flex-shrink: 0;
+      padding: var(--spacing-md);
+      padding-bottom: calc(var(--spacing-md) + var(--safe-bottom));
+      background: #ffffff;
+      border-top: 1px solid var(--border);
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+    }
+    
+    .modal-body .card {
+      margin-bottom: var(--spacing-md);
+    }
+    
+    .modal-body .card:last-child {
+      margin-bottom: 0;
+    }
 
     .review-item {
       display: flex;
       justify-content: space-between;
-      padding: 1.125rem 0;
+      padding: 0.875rem 0;
       border-bottom: 1px dashed var(--border);
-      font-size: 1.1875rem;
+      font-size: 1rem;
       gap: 1rem;
       line-height: 1.4;
     }
@@ -593,25 +697,25 @@
     .total {
       display: flex;
       justify-content: space-between;
-      font-size: 1.75rem;
+      font-size: 1.5rem;
       font-weight: 900;
-      padding-top: 1.25rem;
-      margin-top: 1.25rem;
+      padding-top: 1rem;
+      margin-top: 1rem;
       border-top: 2px solid var(--border);
     }
 
     .info-grid {
       display: grid;
-      gap: 1rem;
-      font-size: 1.1875rem;
-      margin-bottom: 1.75rem;
+      gap: 0.75rem;
+      font-size: 1rem;
+      margin-bottom: 1.25rem;
     }
 
     .info-item {
       display: flex;
       justify-content: space-between;
       gap: 1rem;
-      line-height: 1.5;
+      line-height: 1.4;
     }
 
     .info-item strong {
@@ -659,35 +763,121 @@
       display: none;
     }
 
+    /* Add bottom padding to catalog when shopping to prevent dock from blocking items */
+    #catalog {
+      padding-bottom: clamp(2rem, 8vh, 4rem); /* Less padding needed for floating icon */
+    }
+
+    #shopScreen {
+      margin-bottom: var(--spacing-lg);
+    }
+
     .empty {
       text-align: center;
-      padding: 3.5rem 1.75rem;
+      padding: 2rem 1.25rem;
       color: var(--text);
       opacity: 0.5;
-      font-size: 1.1875rem;
+      font-size: 1rem;
+    }
+
+    /* Small landscape phones */
+    @media (max-height: 500px) and (orientation: landscape) {
+      :root {
+        --spacing-xs: 0.25rem;
+        --spacing-sm: 0.4rem;
+        --spacing-md: 0.6rem;
+        --spacing-lg: 0.8rem;
+      }
+      
+      header {
+        padding: 0.3rem 0.75rem;
+      }
+      
+      h1 {
+        font-size: 1rem;
+        margin-bottom: 0;
+      }
+      
+      .subtitle {
+        display: none; /* Hide subtitle in tight landscape */
+      }
+      
+      .card {
+        padding: 0.6rem 0.75rem;
+        margin: 0.4rem 0;
+      }
+      
+      .step-title {
+        font-size: 1.1rem;
+      }
+      
+      .step-desc {
+        font-size: 0.85rem;
+        margin-bottom: 0.8rem;
+      }
+      
+      .field {
+        margin-bottom: 0.75rem;
+      }
+      
+      input, select, textarea, .btn {
+        min-height: 2.75rem;
+        padding: 0.6rem 0.8rem;
+      }
+      
+      .dock {
+        width: 3rem;
+        height: 3rem;
+        min-width: 3rem;
+        max-width: 3rem;
+        min-height: 3rem;
+        max-height: 3rem;
+        bottom: 0.75rem;
+        right: 0.75rem;
+      }
+      
+      .badge {
+        width: 1.5rem;
+        height: 1.5rem;
+        min-width: 1.5rem;
+        max-width: 1.5rem;
+        min-height: 1.5rem;
+        max-height: 1.5rem;
+        font-size: 0.75rem;
+        top: -0.4rem;
+        right: -0.4rem;
+      }
+      
+      .cart-icon {
+        font-size: 1.25rem;
+      }
+      
+      #catalog {
+        padding-bottom: 1.5rem;
+      }
     }
 
     /* Tablet Adjustments */
     @media (min-width: 640px) {
-      html {
-        font-size: 17px;
+      :root {
+        --font-base: clamp(1rem, 2.5vw, 1.125rem);
+        --font-lg: clamp(1.125rem, 3vw, 1.375rem);
+        --font-xl: clamp(1.25rem, 3.5vw, 1.625rem);
       }
       
       main {
-        padding: 1rem;
+        padding: var(--spacing-md);
       }
       
-      h1 {
-        font-size: 1.6rem;
+      .items {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: var(--spacing-sm);
       }
     }
 
     /* Desktop Overrides */
     @media (min-width: 768px) {
-      html {
-        font-size: 16px;
-      }
-
       body {
         padding-bottom: 2rem;
       }
@@ -695,63 +885,69 @@
       main {
         max-width: 64rem;
         margin: 0 auto;
-        padding: 1.25rem;
+        padding: var(--spacing-lg);
       }
 
       .card {
-        padding: 1.5rem;
-      }
-
-      h1 {
-        font-size: 1.75rem;
-      }
-
-      .subtitle {
-        font-size: 1rem;
-      }
-
-      .step-title {
-        font-size: 1.75rem;
+        padding: var(--spacing-xl) var(--spacing-lg);
       }
 
       .items {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: var(--spacing-md);
       }
 
+      /* Keep floating cart icon on desktop - fixed size */
       .dock {
-        left: 50%;
-        transform: translateX(-50%);
-        right: auto;
-        width: min(90%, 64rem);
-        border-radius: 1.25rem 1.25rem 0 0;
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        padding: 1.25rem 2rem;
+        width: 4.5rem;
+        height: 4.5rem;
+        min-width: 4.5rem;
+        max-width: 4.5rem;
+        min-height: 4.5rem;
+        max-height: 4.5rem;
+        bottom: 2rem;
+        right: 2rem;
       }
-
-      .cart-info {
-        margin-bottom: 0;
-        flex: 1;
-        justify-content: flex-start;
+      
+      .badge {
+        width: 2.25rem;
+        height: 2.25rem;
+        min-width: 2.25rem;
+        max-width: 2.25rem;
+        min-height: 2.25rem;
+        max-height: 2.25rem;
+        font-size: 1rem;
+        top: -0.5rem;
+        right: -0.5rem;
       }
-
-      .dock .btn {
-        width: auto;
-        min-width: 14rem;
-        max-width: none;
+      
+      .cart-icon {
+        font-size: 2rem;
       }
 
       /* Modal desktop fixes */
       .modal-content {
         max-width: 44rem;
-        margin: 2.5rem auto;
+        height: auto;
+        max-height: 90vh;
+        margin: auto;
         border-radius: 1.5rem;
-        min-height: auto;
         border: 1px solid var(--border);
         box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+      }
+      
+      .modal-header {
+        border-radius: 1.5rem 1.5rem 0 0;
+        padding: var(--spacing-xl) var(--spacing-lg);
+      }
+      
+      .modal-body {
+        padding: var(--spacing-lg);
+      }
+      
+      .modal-footer {
+        border-radius: 0 0 1.5rem 1.5rem;
+        padding: var(--spacing-lg);
       }
 
       .info-grid {
@@ -773,6 +969,33 @@
       
       .dock {
         width: min(90%, 72rem);
+      }
+      
+      .items {
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      }
+    }
+    
+    /* Ultra-wide screens */
+    @media (min-width: 1536px) {
+      main {
+        max-width: 80rem;
+      }
+      
+      .dock {
+        width: min(90%, 80rem);
+      }
+      
+      .items {
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      }
+    }
+    
+    /* High DPI screens - sharper rendering */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+      body {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
     }
   </style>
@@ -898,12 +1121,18 @@
     </div>
   </main>
 
-  <div class="dock" id="dock">
-    <div class="cart-info">
-      <div class="badge" id="cartCount">0</div>
+  <div class="dock" id="dock" onclick="document.getElementById('reviewBtn').click()" 
+       role="button" 
+       aria-label="View shopping cart" 
+       tabindex="0"
+       onkeypress="if(event.key==='Enter'||event.key===' ') this.click()"
+       title="View Cart">
+    <span class="cart-icon" aria-hidden="true">🛒</span>
+    <div class="badge" id="cartCount" aria-label="items in cart">0</div>
+    <div class="cart-info" style="display:none;">
       <div class="cart-summary" id="cartSummary">No items</div>
     </div>
-    <button class="btn btn-primary" id="reviewBtn">Review Order</button>
+    <button class="btn btn-primary" id="reviewBtn" style="display:none;">Review Order</button>
   </div>
 
   <div class="modal" id="reviewModal">
@@ -913,26 +1142,30 @@
         <button class="close-btn" id="closeModal">×</button>
       </div>
 
-      <div class="card">
-        <div class="info-grid" id="infoReview"></div>
-      </div>
+      <div class="modal-body">
+        <div class="card">
+          <div class="info-grid" id="infoReview"></div>
+        </div>
 
-      <div class="card">
-        <div id="itemsReview"></div>
-        <div class="total">
-          <span>Subtotal</span>
-          <span id="totalPrice">$0.00</span>
+        <div class="card">
+          <div id="itemsReview"></div>
+          <div class="total">
+            <span>Subtotal</span>
+            <span id="totalPrice">$0.00</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label for="notes">Special Instructions</label>
+            <textarea id="notes" placeholder="Ice down drinks, leave with deckhand, etc." style="font-size: 1.125rem;"></textarea>
+          </div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="field">
-          <label for="notes">Special Instructions</label>
-          <textarea id="notes" placeholder="Ice down drinks, leave with deckhand, etc." style="font-size: 1.125rem;"></textarea>
-        </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="submitBtn">Submit Order</button>
       </div>
-
-      <button class="btn btn-primary" id="submitBtn">Submit Order</button>
     </div>
   </div>
 
@@ -1191,7 +1424,10 @@
 
     function updateCart() {
       const entries = Object.entries(cart);
-      $('cartCount').textContent = entries.length;
+      const prevCount = parseInt($('cartCount').textContent) || 0;
+      const newCount = entries.length;
+      
+      $('cartCount').textContent = newCount;
       const total = entries.reduce((sum, [code, itemData]) => {
         const item = items.find(i => i.code === code);
         return sum + (item ? item.price * itemData.qty : 0);
@@ -1199,6 +1435,15 @@
       $('cartSummary').textContent = entries.length 
         ? `${entries.length} item${entries.length>1?'s':''} • $${total.toFixed(2)}`
         : 'No items';
+      
+      // Pulse animation when cart count changes
+      if (newCount !== prevCount && newCount > 0) {
+        const dock = $('dock');
+        dock.classList.remove('pulse');
+        void dock.offsetWidth; // Trigger reflow
+        dock.classList.add('pulse');
+        setTimeout(() => dock.classList.remove('pulse'), 400);
+      }
     }
 
     // Search

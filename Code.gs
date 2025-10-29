@@ -7,9 +7,6 @@
  *************************************************/
 
 /******** CONFIG ********/
-
-// ===== SIMPLE LICENSE CHECK (Subterra) =====
-// Set these two values per client deployment:
 const LICENSE_URL = 'https://script.google.com/macros/s/AKfycbzSxT8TGGOELrF5sfMgsbCZXGCmo47kjewY7Yg5tF_9TbX_LeK32G7HD93t3rIrGCDW/exec';
 const TENANT_ID   = ''; // <-- change per client
 const FAIL_OPEN   = false; // fail-closed to avoid simple trigger bypass
@@ -148,7 +145,7 @@ const ORDER_SHEET_PREFIX = 'ORDER_';
 // QuickBooks IIF Export Settings
 // Account NAMES for IIF export (QuickBooks requires names, not numbers for invoices)
 const QB_AR_ACCOUNT = 'Accounts Receivable';  // A/R account name
-const QB_INCOME_ACCOUNT = 'Sales Income';  // Income account name (must exist in your Chart of Accounts)
+const QB_INCOME_ACCOUNT = 'Merchandise Sales';  // Income account name (must exist in your Chart of Accounts)
 
 /******** CACHE MANAGER ********/
 const CacheManager = (function() {
@@ -344,6 +341,7 @@ function buildAdminMenu() {
     .addSeparator()
     .addItem('🗑️ Clear Cache', 'clearCache')
     .addItem('🔧 Fix Circular References', 'fixCircularReferenceInOrderSheets')
+    .addItem('🔄 Refresh Order Sheet Dropdowns', 'updateAllOrderSheetsWithLatestPriceBook')
     .addItem('🔧 Switch to Client Mode', 'switchToClientMode')
     .addToUi();
 }
@@ -528,16 +526,21 @@ const DataLayer = {
     return customer.pin === String(pin).trim();
   },
   
-  getPriceBookItems: function() {
-    const cached = CacheManager.get('pricebook');
-    if (cached) return cached;
+  getPriceBookItems: function(skipCache) {
+    if (!skipCache) {
+      const cached = CacheManager.get('pricebook');
+      if (cached) return cached;
+    }
     
     const sh = SpreadsheetApp.getActive().getSheetByName(SHEET.PRICEBOOK);
     if (!sh || sh.getLastRow() < 2) return [];
     
-    const vals = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+    // Get all data from row 2 to the last row with content
+    const lastRow = sh.getLastRow();
+    const lastCol = sh.getLastColumn();
+    const vals = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
     const items = vals
-      .filter(function(r) { return r[0]; })
+      .filter(function(r) { return r[0]; })  // Filter out rows with empty item code
       .map(function(r) {
         return {
           item: String(r[0]).trim(),
@@ -890,13 +893,13 @@ function buildIndividualOrderSheet(sheet, orderInfo) {
   }
   
   // Add data validation for Item Code column (dropdown from pricebook)
-  // Use "List from a range" to avoid 500-item limit
+  // Use open-ended range to automatically include new items added to PriceBook
   const ss = SpreadsheetApp.getActive();
   const priceSheet = ss.getSheetByName(SHEET.PRICEBOOK);
   if (priceSheet && priceSheet.getLastRow() > 1) {
     const itemCodeRange = sheet.getRange('A10:A' + (currentRow - 1));
-    // Reference column A (Item) in PriceBook sheet, starting from row 2 (skip header)
-    const priceBookItemRange = priceSheet.getRange('A2:A' + priceSheet.getLastRow());
+    // Use open-ended range 'A2:A' without fixed end - this automatically expands when new items are added
+    const priceBookItemRange = priceSheet.getRange('A2:A');
     const validation = SpreadsheetApp.newDataValidation()
       .requireValueInRange(priceBookItemRange, true)
       .setAllowInvalid(true)
@@ -1385,6 +1388,89 @@ function fixCircularReferenceInOrderSheets() {
   );
 }
 
+/******** UPDATE ALL ORDER SHEETS WITH LATEST PRICEBOOK (Silent Version) ********/
+function updateAllOrderSheetDropdownsSilent() {
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const priceSheet = ss.getSheetByName(SHEET.PRICEBOOK);
+    
+    if (!priceSheet || priceSheet.getLastRow() < 2) return 0;
+    
+    // Open-ended range that automatically includes all items
+    const priceBookItemRange = priceSheet.getRange('A2:A');
+    const validation = SpreadsheetApp.newDataValidation()
+      .requireValueInRange(priceBookItemRange, true)
+      .setAllowInvalid(true)
+      .build();
+    
+    const sheets = ss.getSheets();
+    let updatedCount = 0;
+    
+    for (var i = 0; i < sheets.length; i++) {
+      const sheet = sheets[i];
+      const sheetName = sheet.getName();
+      
+      // Only update sheets that are order sheets
+      if (sheetName.indexOf(ORDER_SHEET_PREFIX) === 0) {
+        try {
+          // Find the last row with item data (look for data in column A starting from row 10)
+          const lastRow = sheet.getLastRow();
+          if (lastRow >= 10) {
+            // Find actual last row with content in items section
+            let itemLastRow = 10;
+            for (var row = 10; row <= lastRow; row++) {
+              const cellValue = sheet.getRange(row, 1).getValue();
+              if (cellValue) {
+                itemLastRow = row;
+              }
+            }
+            
+            // Add some extra rows for the dropdown (at least 10 extra rows for manual additions)
+            const dropdownEndRow = Math.max(itemLastRow + 10, 19); // At minimum row 19 (10 rows for items)
+            
+            const itemCodeRange = sheet.getRange('A10:A' + dropdownEndRow);
+            itemCodeRange.setDataValidation(validation);
+            updatedCount++;
+          }
+        } catch (e) {
+          logAction('UpdateValidation', 'Failed to update ' + sheetName + ': ' + e.message, 'Warning');
+        }
+      }
+    }
+    
+    logAction('UpdateValidation', 'Auto-updated ' + updatedCount + ' order sheets', 'Success');
+    return updatedCount;
+  } catch (e) {
+    logAction('UpdateValidation', 'Auto-update failed: ' + e.message, 'Error');
+    return 0;
+  }
+}
+
+/******** UPDATE ALL ORDER SHEETS WITH LATEST PRICEBOOK (Manual Version) ********/
+function updateAllOrderSheetsWithLatestPriceBook() {
+  requireLicense();
+  const ui = SpreadsheetApp.getUi();
+  const result = ui.alert(
+    'Update Order Sheets',
+    'This will update all order sheets to include newly added items in their dropdowns.\n\n' +
+    'Do you want to continue?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (result !== ui.Button.YES) return;
+  
+  const updatedCount = updateAllOrderSheetDropdownsSilent();
+  
+  uiToast('✅ Updated ' + updatedCount + ' order sheet(s) with latest items');
+  ui.alert(
+    '✅ Order Sheets Updated',
+    'Successfully updated ' + updatedCount + ' order sheet(s).\n\n' +
+    'All order sheets now have access to the latest PriceBook items in their dropdowns.\n\n' +
+    'New orders will automatically include all items.',
+    ui.ButtonSet.OK
+  );
+}
+
 /******** NAVIGATION ********/
 function openOrderMaster() {
   SpreadsheetApp.getActive().setActiveSheet(SpreadsheetApp.getActive().getSheetByName(SHEET.ORDER_MASTER));
@@ -1578,7 +1664,15 @@ function addItemManually() {
   priceSheet.appendRow([code, category, unit, price, markup, notes]);
   
   CacheManager.clear();
-  ui.alert('✅ Item Added', 'Code: ' + code + '\nCategory: ' + category, ui.ButtonSet.OK);
+  
+  // Automatically update all existing order sheets to include the new item
+  updateAllOrderSheetDropdownsSilent();
+  
+  ui.alert('✅ Item Added', 
+    'Code: ' + code + '\n' +
+    'Category: ' + category + '\n\n' +
+    '✅ All order sheets updated with new item!',
+    ui.ButtonSet.OK);
   logAction('ItemAdd', 'Added ' + code, 'Success');
 }
 
@@ -2688,7 +2782,8 @@ function doGet() {
 }
 
 function getItemsForWebApp() {
-  return DataLayer.getPriceBookItems().map(function(item) {
+  // Always skip cache to ensure we get the latest items from the price book
+  return DataLayer.getPriceBookItems(true).map(function(item) {
     // Calculate selling price: base price + markup
     const sellingPrice = item.basePrice * (1 + (item.defaultMarkup / 100));
     return { code: item.item, name: item.notes || item.item, category: item.category, unit: item.unit, price: sellingPrice };
